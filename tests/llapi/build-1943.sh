@@ -2,6 +2,8 @@
 set -euo pipefail
 # Run inside Jotego's public jtcore20 build container, with this repo at /jtcores.
 cd /jtcores
+# The container runs as root; trust only this mounted source checkout.
+git config --global --add safe.directory /jtcores
 export JTROOT=/jtcores
 export JTFRAME=$JTROOT/modules/jtframe
 export MODULES=$JTROOT/modules
