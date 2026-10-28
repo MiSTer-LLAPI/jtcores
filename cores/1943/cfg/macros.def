@@ -31,3 +31,8 @@ JTFRAME_PROM_START = 0xD8000
 # not enough to make it fit. The logo must go out
 JTFRAME_OSD_NOLOGO
 JT1943_MCU_HLE
+
+[mister]
+# Experimental arcade LLAPI pilot; USER port is reserved for LLAPI.
+JTFRAME_LLAPI
+JTFRAME_NO_DB15

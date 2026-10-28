@@ -1,0 +1,105 @@
+name: 1943 arcade LLAPI pilot
+on:
+  push:
+    branches: [llapi-1943-test]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: 1943-llapi-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 3
+      - name: Import verified source on the experimental branch
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = llapi-1943-test
+          if test -f source-import.json; then
+            python3 - <<'PY'
+          import hashlib, json, re
+          from pathlib import Path
+          m = json.loads(Path('source-import.json').read_text())
+          assert re.fullmatch('[0-9a-f]{40}', m['commit'])
+          assert re.fullmatch('[0-9a-f]{40}', m['tree'])
+          assert re.fullmatch('[0-9a-f]{64}', m['sha256'])
+          assert hashlib.sha256(Path('jt1943-llapi.bundle').read_bytes()).hexdigest() == m['sha256']
+          Path('/tmp/llapi-source').write_text(m['commit'] + '\n' + m['tree'] + '\n')
+          PY
+            mapfile -t expected < /tmp/llapi-source
+            git bundle verify jt1943-llapi.bundle
+            git fetch ./jt1943-llapi.bundle refs/heads/llapi-1943-test
+            test "$(git rev-parse FETCH_HEAD)" = "${expected[0]}"
+            test "$(git rev-parse 'FETCH_HEAD^{tree}')" = "${expected[1]}"
+            # Keep both source histories, and only fast-forward this test branch.
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            imported=$(printf '%s\n' 'Import verified 1943 arcade LLAPI integration' | git commit-tree "${expected[1]}" -p "$GITHUB_SHA" -p "${expected[0]}")
+            git push origin "$imported:refs/heads/$GITHUB_REF_NAME"
+            echo "sha=$imported" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
+  controllers:
+    needs: source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            tests/llapi
+            modules/jtframe/target/mister/hdl
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Test arcade mapping and protocol compilation
+        run: |
+          iverilog -g2012 -s arcade_map_tb -o /tmp/llapi-map tests/llapi/arcade_map_tb.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
+          vvp /tmp/llapi-map
+          iverilog -g2012 -s jtframe_llapi_arcade -o /tmp/llapi-full modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
+  build:
+    needs: [source, controllers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            cores/1943
+            cores/gng
+            cores/trojan
+            modules/jtframe
+            modules/jt8051
+            modules/jt12
+            tests/llapi
+      - name: Fetch the public sound dependency at its pinned commit
+        run: git submodule update --init --recursive --depth 1 modules/jt12
+      - name: Compile 1943 with the official Jotego build container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$GITHUB_WORKSPACE:/jtcores" -w /jtcores jotego/jtcore20 bash /jtcores/tests/llapi/build-1943.sh
+      - name: Upload accepted test RBF and build diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: 1943-LLAPI-pilot-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            pilot-build/
+            pilot-reports/
+            log/mister/
+            cores/1943/mister/output_files/*.summary
+            cores/1943/mister/output_files/*.sta.rpt

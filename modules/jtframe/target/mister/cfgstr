@@ -40,10 +40,13 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
 {{ if .JTFRAME_OSD_VOL }}           O67,FX volume,high,highest,lowest,low; {{ end }}
 {{ if .JTFRAME_OSD_TEST }}          OA,Service mode,Off,On; {{ end }}
 {{ if .JTFRAME_DIAL }}              o03,Sensitivity,high,highest,lowest,low;{{end}}
+{{ if .JTFRAME_LLAPI }} -,LLAPI arcade enabled;
+{{ else }}
 {{ if .JTFRAME_UART }}
     {{ if .JTFRAME_NO_DB15 }}       o6,User port,Off,UART; {{ else }}
                                     o56,User port,Off,DB15 Joystick,UART; {{ end }}
     {{ else }}                      o5,User port,Off,DB15 Joystick; {{ end }}
+{{ end }}
 {{ if .JTFRAME_CREDITS }} OC,Show credits in pause,On,Off; {{ end }}
 R0,Reset;
 {{ with .MISTER_EXTRA }} {{ . }} {{ end }}

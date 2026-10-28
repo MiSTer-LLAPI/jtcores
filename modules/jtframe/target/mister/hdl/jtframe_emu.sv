@@ -198,7 +198,12 @@ assign HDMI_FREEZE   = 0;
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT= 0;
 assign AUDIO_MIX     = 0;
-assign BUTTONS       = 0;
+`ifdef JTFRAME_LLAPI
+wire llapi_osd;
+assign BUTTONS={1'b0,llapi_osd};
+`else
+assign BUTTONS=0;
+`endif
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 
@@ -460,6 +465,10 @@ jtframe_mister #(
     .VIDEO_HEIGHT   (`JTFRAME_HEIGHT )
 )
 u_frame(
+`ifdef JTFRAME_LLAPI
+    .clk_llapi      ( CLK_50M        ),
+    .llapi_osd      ( llapi_osd      ),
+`endif
     .clk_sys        ( clk_sys        ),
     .clk_rom        ( clk_rom        ),
     .clk_pico       ( clk_pico       ),
