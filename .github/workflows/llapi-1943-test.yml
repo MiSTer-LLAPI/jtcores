@@ -89,7 +89,7 @@ jobs:
       - name: Compile 1943 with the official Jotego build container
         run: |
           set -euo pipefail
-          docker run --rm --entrypoint /bin/bash -v "$GITHUB_WORKSPACE:/jtcores" -w /jtcores jotego/jtcore20 /jtcores/tests/llapi/build-1943.sh
+          docker run --rm --network host --entrypoint /bin/bash -v "$GITHUB_WORKSPACE:/jtcores" -w /jtcores jotego/jtcore20 /jtcores/tests/llapi/build-1943.sh
       - name: Upload accepted test RBF and build diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -103,3 +103,6 @@ jobs:
             log/mister/
             cores/1943/mister/output_files/*.summary
             cores/1943/mister/output_files/*.sta.rpt
+            cores/1943/mister/output_files/*.map.rpt
+            cores/1943/mister/*.qsf
+            cores/1943/mister/*.qip
