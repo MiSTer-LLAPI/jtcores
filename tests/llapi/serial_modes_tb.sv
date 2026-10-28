@@ -45,7 +45,7 @@ module serial_modes_tb;
         repeat(20) @(negedge clk50);
         if(pins!==7'h7f) $fatal(1,"pinout switch did not release the port");
         repeat(8000) @(negedge clk50);
-        if((pins|7'h50)!==7'h7f) $fatal(1,"Bliss-Box pinout drives a data pin");
+        if((pins|7'h30)!==7'h7f) $fatal(1,"Bliss-Box pinout drives a data pin");
         choose(0);
         if(pins[2]!==0 || joy1!==16'h1234 || joy2!==16'h5678) $fatal(1,"LLAPI not restored");
         $display("PASS: LLAPI default, exclusive GPIO ownership, released transition, USB P2 and LLAPI restoration");

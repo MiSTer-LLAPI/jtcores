@@ -56,8 +56,10 @@ Pinout verificado nas fontes MiSTer-devel/SNES_MiSTer (SNES.sv), Genesis_MiSTer 
 
 Testes locais adicionais: modelos de comandos ao nível dos pinos (arestas SNES, handshake MD de 3/6 botões, identificação/nibbles Saturn), comando desligado, libertação da porta, mudança dos quatro modos, regresso ao LLAPI, fallback USB e encaminhamento de jogo/moeda/Start/menu através do leitor SNES completo. Falta teste físico desta nova variante nos três adaptadores.
 
-### Saturn HDMI Bliss-Box com adaptador passivo
+### Saturn HDMI Bliss-Box / SNAC Mini
 
-O utilizador identificou um SNAC Mini com protocolo original e autorizou preparar o perfil e o adaptador. A opção **Saturn cable** permite SNAC original (predefinido) ou **Bliss-Box (adapter)**. O segundo perfil exige o interposer documentado em `Saturn-BlissBox-adapter.md`: o Mini original não liga o pino HDMI 10 usado pelo cabo Saturn Bliss-Box. Não existe compatibilidade direta desse cabo com o Mini sem remapeamento físico.
+O perfil **Bliss-Box HDMI digital** remapeia os sinais para o cabo Saturn de entrada da Bliss-Box ligado diretamente a um SNAC Mini HDMI original: TH=USER5, TR=USER4 e D3..D0=USER3..USER0. A linha TL do cabo está no HDMI10, que o Mini original não encaminha; o leitor de comandos digitais de quatro fases não precisa dessa linha. Não suporta o handshake do 3D Pad em modo analógico. A compatibilidade física desta ligação direta ainda precisa de teste real.
 
-O esquema do SNAC Mini é de blue212/SNAC, `snac/SNAC hdmi-mini.sch`. A ligação do cabo é a coluna Saturn da tabela do fabricante, publicada por ulao no tópico Cable pin-out diagram. Os links e a correspondência dos sinais estão no documento do adaptador. Os testes simulam os dois pinouts de forma independente, incluindo mudança do pinout com a porta libertada. Ainda é necessário verificar por continuidade o interposer montado e fazer o teste físico com o comando.
+Também está documentado um interposer passivo completo em `Saturn-BlissBox-adapter.md`. Esse interposer remapeia os sete sinais e permite usar o perfil **SNAC original** com o cabo Bliss-Box. No perfil Bliss-Box direto não se usa o interposer.
+
+Fontes: esquema `snac/SNAC hdmi-mini.sch` de blue212/SNAC; coluna Saturn da tabela de cabos Bliss-Box publicada por ulao; sinais físicos Saturn descritos por Plutiedev. A identificação correta é TH no pino Saturn 4 e TL no pino Saturn 6; a numeração da imagem da tabela do cabo é invertida em relação aos números do conector Saturn. Os testes simulam ambas as ligações ao nível dos sinais e a mudança do pinout com a porta libertada.
