@@ -469,8 +469,9 @@ wire [15:0] joyusb_1, joyusb_2;
 wire [3:0] llapi_start,llapi_coin;
 assign db15_en=0;
 assign show_osd=0;
-jtframe_llapi_arcade #(.BUTTONS(BUTTONS)) u_llapi(
+jtframe_serial_arcade #(.BUTTONS(BUTTONS)) u_serial(
     .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+    .mode(status[63:62]),.saturn_blissbox(status[61]),
     .osd_active(OSD_STATUS),.user_in(USER_IN),.user_out(USER_OUT),
     .usb1(joyusb_1),.usb2(joyusb_2),.joy1(joystick1),.joy2(joystick2),
     .start(llapi_start),.coin(llapi_coin),.osd_request(llapi_osd));

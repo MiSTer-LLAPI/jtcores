@@ -13,6 +13,7 @@ jtframe/target/mister:
     - joydb15.v
   - when: [ JTFRAME_LLAPI ]
     get:
+      - jtframe_serial_arcade.sv
       - jtframe_llapi_arcade.sv
       - jtframe_llapi_protocol.sv
       - llapi_arcade.sdc

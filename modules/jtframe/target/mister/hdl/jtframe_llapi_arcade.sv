@@ -5,7 +5,7 @@
 module jtframe_llapi_arcade #(
     parameter BUTTONS=3
 )(
-    input clk_50, clk_sys, rst, vblank, osd_active,
+    input clk_50, clk_sys, rst, vblank, osd_active, enable,
     input [6:0] user_in,
     output logic [6:0] user_out,
     input [15:0] usb1, usb2,
@@ -19,8 +19,8 @@ module jtframe_llapi_arcade #(
     (* async_reg="true" *) reg rst50_meta=1, rst50_sync=1;
     (* async_reg="true" *) reg osd50_meta=0, osd50_sync=0;
     reg seen1=0,seen2=0;
-    wire valid1=en1 && type1!=8'hff && (type1!=0 || seen1);
-    wire valid2=en2 && type2!=8'hff && (type2!=0 || seen2);
+    wire valid1=enable && en1 && type1!=8'hff && (type1!=0 || seen1);
+    wire valid2=enable && en2 && type2!=8'hff && (type2!=0 || seen2);
     always @(posedge clk_50) begin
         rst50_meta<=rst; rst50_sync<=rst50_meta;
         osd50_meta<=osd_active; osd50_sync<=osd50_meta;
@@ -39,12 +39,12 @@ module jtframe_llapi_arcade #(
     end
     LLAPI u_port1(.CLK_50M(clk_50),.LLAPI_SYNC(vblank),
         .IO_LATCH_IN(user_in[0]),.IO_LATCH_OUT(latch1),
-        .IO_DATA_IN(user_in[1]),.IO_DATA_OUT(data1),.ENABLE(~osd50_sync),
+        .IO_DATA_IN(user_in[1]),.IO_DATA_OUT(data1),.ENABLE(enable && ~osd50_sync),
         .LLAPI_BUTTONS(buttons1),.LLAPI_ANALOG(),.LLAPI_TYPE(type1),
         .LLAPI_MODES(),.LLAPI_EN(en1));
     LLAPI u_port2(.CLK_50M(clk_50),.LLAPI_SYNC(vblank),
         .IO_LATCH_IN(user_in[4]),.IO_LATCH_OUT(latch2),
-        .IO_DATA_IN(user_in[5]),.IO_DATA_OUT(data2),.ENABLE(~osd50_sync),
+        .IO_DATA_IN(user_in[5]),.IO_DATA_OUT(data2),.ENABLE(enable && ~osd50_sync),
         .LLAPI_BUTTONS(buttons2),.LLAPI_ANALOG(),.LLAPI_TYPE(type2),
         .LLAPI_MODES(),.LLAPI_EN(en2));
     // Button levels are slow asynchronous inputs, not a streamed data bus.
