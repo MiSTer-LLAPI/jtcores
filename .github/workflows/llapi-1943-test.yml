@@ -37,6 +37,9 @@ jobs:
           Path('/tmp/llapi-source').write_text(m['commit'] + '\n' + m['tree'] + '\n')
           PY
             mapfile -t expected < /tmp/llapi-source
+            # Later web commits can put the bundle prerequisite outside the
+            # shallow checkout. Fetch that exact public upstream base only.
+            git fetch --depth=1 origin b222692d4c0c9a26a6cb3c99c6820b1ed4a5d565
             git bundle verify jt1943-llapi.bundle
             git fetch ./jt1943-llapi.bundle refs/heads/llapi-1943-test
             test "$(git rev-parse FETCH_HEAD)" = "${expected[0]}"
@@ -66,7 +69,10 @@ jobs:
         run: |
           iverilog -g2012 -s arcade_map_tb -o /tmp/llapi-map tests/llapi/arcade_map_tb.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
           vvp /tmp/llapi-map
-          iverilog -g2012 -s jtframe_llapi_arcade -o /tmp/llapi-full modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
+          iverilog -g2012 -s snac_readers_tb -o /tmp/snac-readers tests/llapi/snac_readers_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+          vvp /tmp/snac-readers
+          iverilog -g2012 -s serial_modes_tb -o /tmp/serial-modes tests/llapi/serial_modes_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
+          vvp /tmp/serial-modes
   build:
     needs: [source, controllers]
     runs-on: ubuntu-24.04
