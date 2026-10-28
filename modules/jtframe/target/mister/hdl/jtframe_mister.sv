@@ -11,6 +11,10 @@ module jtframe_mister #(parameter
     SDRAMW                  = 23
 )(
     input           clk_sys,
+`ifdef JTFRAME_LLAPI
+    input           clk_llapi,
+    output          llapi_osd,
+`endif
     input           clk_rom,
     input           clk_pico,
     input           pll_locked,
@@ -310,11 +314,13 @@ assign {FB_PAL_CLK, FB_FORCE_BLANK, FB_PAL_ADDR, FB_PAL_DOUT, FB_PAL_WR} = '0;
 // If JTFRAME_UART is not defined, the core side is disabled
 // If JTFRAME_CHEAT is not defined, the cheat side is disabled
 // Otherwise, both can listen and talk
+`ifndef JTFRAME_LLAPI
 always @(posedge clk_sys) begin
     USER_OUT <= db15_en ? joy_out :
         uart_en ? {~6'h0, uart_tx&game_tx } :
         7'h7f;
 end
+`endif
 
 assign uart_rx  = uart_en ? USER_IN[1] : 1'b1;
 assign game_rx  = uart_rx;
@@ -459,7 +465,21 @@ wire [7:0] hps_din;
 wire [15:0] joyusb_1, joyusb_2;
 
 
-`ifndef JTFRAME_NO_DB15
+`ifdef JTFRAME_LLAPI
+wire [3:0] llapi_start,llapi_coin;
+assign db15_en=0;
+assign show_osd=0;
+jtframe_llapi_arcade #(.BUTTONS(BUTTONS)) u_llapi(
+    .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+    .osd_active(OSD_STATUS),.user_in(USER_IN),.user_out(USER_OUT),
+    .usb1(joyusb_1),.usb2(joyusb_2),.joy1(joystick1),.joy2(joystick2),
+    .start(llapi_start),.coin(llapi_coin),.osd_request(llapi_osd));
+`elsif JTFRAME_NO_DB15
+assign db15_en=0;
+assign show_osd=0;
+assign joystick1=joyusb_1;
+assign joystick2=joyusb_2;
+`else
 assign db15_en  = status[37];
 jtframe_joymux #(.BUTTONS(BUTTONS)) u_joymux(
     .rst        ( rst       ),
@@ -477,11 +497,6 @@ jtframe_joymux #(.BUTTONS(BUTTONS)) u_joymux(
     .joymux_1   ( joystick1 ),
     .joymux_2   ( joystick2 )
 );
-`else
-assign db15_en   = 0;
-assign show_osd  = 0;
-assign joystick1 = joyusb_1;
-assign joystick2 = joyusb_2;
 `endif
 
 `ifdef JTFRAME_SHADOW
@@ -757,8 +772,13 @@ jtframe_board #(
     .joyana_r1      ( joyana_r1       ),
     .joyana_l2      ( joyana_l2       ),
     .joyana_r2      ( joyana_r2       ),
+`ifdef JTFRAME_LLAPI
+    .board_start    ( llapi_start     ),
+    .board_coin     ( llapi_coin      ),
+`else
     .board_start    ( 4'd0            ),
     .board_coin     ( 4'd0            ),
+`endif
     .game_joystick1 ( game_joystick1  ),
     .game_joystick2 ( game_joystick2  ),
     .game_joystick3 ( game_joystick3  ),
