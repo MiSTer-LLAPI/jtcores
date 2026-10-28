@@ -69,7 +69,7 @@ module jtframe_snac_arcade #(
 )(
     input clk_50,enable,
     input [1:0] mode, // 1 SNES, 2 Mega Drive, 3 Saturn digital
-    input saturn_blissbox, // requires the documented passive HDMI remapper
+    input saturn_blissbox, // digital-only direct HDMI cable layout
     input [6:0] user_in,
     output reg [6:0] user_out=7'h7f,
     // [8] coin, [7] start, [6:4] buttons, [3:0] UDLR, active high
@@ -141,13 +141,14 @@ module jtframe_snac_arcade #(
                 3: begin
                     // Saturn digital: TH=USER4, TR=USER6; D3..0 use
                     // USER3,5,0,1. TL/USER2 is released (input).
-                    // Bliss-Box + passive remapper: TH=USER6, TR=USER4,
-                    // D3..0=USER3..0, TL/USER5 remains released.
+                    // Bliss-Box direct: TH=USER5, TR=USER4, D3..0=USER3..0.
+                    // TL is HDMI10 (unrouted on original Mini); digital
+                    // four-phase pads do not use that handshake line.
                     case(phase)
-                        0: user_out<=7'h2f; // TH=0, TR=0 in either supported layout
-                        1: begin sat_extra<=sat_in; user_out[saturn_blissbox ? 6 : 4]<=1; end
-                        2: begin sat_main<=sat_in; user_out[saturn_blissbox ? 6 : 4]<=0; user_out[saturn_blissbox ? 4 : 6]<=1; end
-                        3: begin sat_dir<=sat_in; user_out[saturn_blissbox ? 6 : 4]<=1; end
+                        0: user_out<=saturn_blissbox ? 7'h4f : 7'h2f; // TH=0, TR=0
+                        1: begin sat_extra<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=1; end
+                        2: begin sat_main<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=0; user_out[saturn_blissbox ? 4 : 6]<=1; end
+                        3: begin sat_dir<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=1; end
                         4: begin
                             // Digital pad ID: final phase is {L,1,0,0}.
                             // Reject an analog-handshake pad instead of

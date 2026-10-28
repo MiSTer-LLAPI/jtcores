@@ -38,7 +38,7 @@ module snac_readers_tb;
             md_data={~md_as_pressed,2'b00,~md_pressed[1:0]};
             if(six && md_count==3) md_data[3:0]=0;
         end else if(six && md_count==3) md_data={2'b11,~md_extra_pressed};
-        case(blissbox ? {pins[4],pins[6]} : {pins[6],pins[4]})
+        case(blissbox ? {pins[4],pins[5]} : {pins[6],pins[4]})
             0: sat_data=4'hf;
             1: sat_data=~sat_main_pressed;
             2: sat_data=~sat_dir_pressed;
