@@ -2,7 +2,9 @@
 
 This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Battle of Midway (Euro)** on MiSTer. The integration is experimental and currently limited to this core; it does not add LLAPI to every game in jtcores.
 
-[Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261029-2p) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
+[Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261029-osd-pause) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
+
+The current build automatically pauses while the OSD menu is open and resumes when it closes. A manual pause remains active after closing OSD. The new OSD-pause change has passed regression tests and timing checks; physical confirmation of this change is pending.
 
 | USER / Serial port mode | Players |
 | --- | --- |
@@ -16,7 +18,7 @@ LLAPI uses a dedicated USER-port controller path and synchronizes polling to the
 
 The SNES two-player adapter needs shared latch USER0, P1 clock/data USER1/USER5 and P2 clock/data USER3/USER6. B shoots, A bombs, Select inserts the corresponding coin and Start starts that player. Down+Start+B opens the menu from either SNES controller. DB15 uses Select/Start per player and Start+C for the menu. See the release instructions for all modes.
 
-Automated controller tests, FPGA compilation and all required timing checks passed. **All controller modes have been physically tested and confirmed working by UltimateMiSTer: LLAPI 2P, SNAC SATURN 1P, SNAC DB9 1P (Mega Drive three-button and six-button), SNAC DB15 2P (Ultimate SNAC DB15), and SNAC SNES 2P.** Saturn support is digital only; analog 3D handshake, multitaps and Bliss-Box cable profiles are not included.
+Automated controller tests, FPGA compilation and all required timing checks passed. **The preceding SNES 2P build was physically tested and confirmed working by UltimateMiSTer in all controller modes: LLAPI 2P, SNAC SATURN 1P, SNAC DB9 1P (Mega Drive three-button and six-button), SNAC DB15 2P (Ultimate SNAC DB15), and SNAC SNES 2P.** Saturn support is digital only; analog 3D handshake, multitaps and Bliss-Box cable profiles are not included.
 
 Install through Update All with LLAPI enabled, or download the RBF and MRA together from the release. Supply your own compatible game ROMs; no ROM data is included. Reselect the serial-port mode after upgrading from earlier pilots.
 
