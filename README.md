@@ -22,7 +22,7 @@ Install through Update All with LLAPI enabled, or download the RBF and MRA toget
 
 ### Mega Drive controls — hardware tested
 
-Both three-button and six-button Mega Drive controllers have been tested successfully by RetroShopPT. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **F5 was also reported working for coin insertion during the three-button test.**
+Both three-button and six-button Mega Drive controllers have been tested successfully by RetroShopPT. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **Keyboard: press 5 to insert a P1 coin (not F5; F5 lowers the volume).**
 
 This is an independent experimental MiSTer-LLAPI fork, not an official Jotego release. Original authorship, history, source notices and licenses are preserved below and throughout the repository. Please support Jotego's FPGA research.
 
