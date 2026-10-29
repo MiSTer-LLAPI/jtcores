@@ -1,0 +1,149 @@
+name: 1944 LLAPI and SNAC experimental
+on:
+  push:
+    branches: [llapi-1944-test]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: 1944-llapi-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+      - name: Commit isolated 1944 configuration and official MRA
+        id: source
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = llapi-1944-test
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import shutil
+          src=Path('cores/cps2/cfg'); dst=Path('cores/1944/cfg')
+          assert src.is_dir()
+          if not dst.exists():shutil.copytree(src,dst)
+          p=dst/'macros.def'; s=p.read_text()
+          marker='# MiSTer-LLAPI 1944 experimental configuration'
+          if marker not in s:
+              s+='\n[mister]\n'+marker+'\nCORENAME=JT1944\nJTFRAME_BUTTONS=2\nJTFRAME_LLAPI\nJTFRAME_NO_DB15\n'
+              p.write_text(s)
+          bridge=Path('modules/jtframe/target/mister/hdl/jtframe_mister.sv').read_text()
+          assert '.osd_shown      ( OSD_STATUS      )' in bridge
+          assert '.mode(status[63:61])' in bridge
+          common=Path('modules/jtframe/target/mister/cfgstr').read_text()
+          assert 'oTV,Serial port,LLAPI 2P,SNAC SATURN 1P,SNAC DB9 1P,SNAC DB15 2P,SNAC SNES 2P;' in common
+          Path('tests/llapi/build-1944.sh').write_text('#!/usr/bin/env bash\nset -euo pipefail\n# Run inside Jotego\'s public jtcore20 build container, with this repo at /jtcores.\ncd /jtcores\n# The container runs as root; trust only this mounted source checkout.\ngit config --global --add safe.directory /jtcores\nexport JTROOT=/jtcores\nexport JTFRAME=$JTROOT/modules/jtframe\nexport MODULES=$JTROOT/modules\nexport CORES=$JTROOT/cores\nexport JTBIN=$JTROOT/release\nexport RLS=$JTBIN\nexport MRA=$JTBIN/mra\nexport ROM=$JTROOT/rom\nexport POCKET=$JTFRAME/target/pocket\nexport JTUTIL=/tmp/llapi-support\nexport PATH=/tmp/llapi-tools:$JTFRAME/bin:/usr/local/go/bin:$PATH\nmkdir -p /tmp/llapi-tools "$JTUTIL" "$JTBIN" pilot-reports\n# Set only build variables; do not source scripts that override CODEX_HOME.\n(cd "$JTFRAME/src/jtframe" && go build -o /tmp/llapi-tools/jtframe .)\n# Decode no game ROMs and use the official Euro MRA supplied with this pilot.\n# Strict JTFRAME timing acceptance stays enabled for all attempts.\nsuccess=0\nfor seed in 1 2 3; do\n    if jtcore 1944 -mister --nodbg --nolinter --clean --seed "$seed" > "pilot-reports/seed-$seed.log" 2>&1; then\n        success=1\n        printf \'%s\\n\' "$seed" > pilot-reports/accepted-seed.txt\n        break\n    fi\n    cp -f log/mister/jt1944* pilot-reports/ 2>/dev/null || true\n    if ! grep -q \'^FAIL$\' "pilot-reports/seed-$seed.log"; then\n        tail -100 "pilot-reports/seed-$seed.log"\n        exit 1\n    fi\ndone\nif test "$success" != 1; then\n    echo \'No seed passed compilation and strict timing acceptance.\'\n    exit 1\nfi\npython3 tests/llapi/check-1944-timing.py\nmkdir -p pilot-build/cores pilot-build/mra pilot-build/reports\ncp release/mister/jt1944.rbf pilot-build/cores/jt1944_llapi_snac_20261029_test.rbf\ncp tests/llapi/1944-LLAPI-Test.mra pilot-build/mra/\ncp tests/llapi/1944-README.md pilot-build/LE-ME.md\ncp pilot-reports/* pilot-build/reports/\ncp cores/1944/mister/output_files/*.summary pilot-build/reports/ 2>/dev/null || true\ncp cores/1944/mister/output_files/*.sta.rpt pilot-build/reports/ 2>/dev/null || true\nprintf \'Source: %s\\nUpstream: b222692d4c0c9a26a6cb3c99c6820b1ed4a5d565\\nArcade LLAPI: 4d63703988cfb2b8256fc3bdb1a4a09b39cceaba\\n\' "$(git rev-parse HEAD)" > pilot-build/SOURCE.txt\n(cd pilot-build && sha256sum cores/*.rbf mra/*.mra > SHA256SUMS)\n')
+          Path('tests/llapi/check-1944-timing.py').write_text('"""Accept an RBF only after all reported worst-case slack values are >= 0."""\nfrom pathlib import Path\nimport json\nimport re\n\nreports = list(Path(\'cores/1944/mister\').rglob(\'jt1944.sta.rpt\'))\nif len(reports) != 1:\n    raise SystemExit(f\'Expected one timing report, found {len(reports)}\')\nreport = reports[0].read_text(errors=\'replace\')\nvalues = [(kind.strip(), float(value)) for kind, value in re.findall(\n    r\'Worst-case ([A-Za-z ]+?) slack is\\s+(-?\\d+(?:\\.\\d+)?)\', report)]\nrequired = {\'setup\', \'hold\', \'recovery\', \'removal\', \'minimum pulse width\'}\nfound = {kind for kind, _ in values}\nif not required.issubset(found):\n    raise SystemExit(f\'Missing timing categories: {required - found}\')\nresult = {\'report\': str(reports[0]), \'worst_slack_ns\': dict(values),\n          \'accepted\': all(value >= 0 for _, value in values)}\nPath(\'pilot-reports/timing-acceptance.json\').write_text(json.dumps(result, indent=2)+\'\\n\')\nprint(json.dumps(result, indent=2))\nif not result[\'accepted\']:\n    raise SystemExit(\'Timing failed: no test RBF will be packaged.\')\n')
+          Path('tests/llapi/1944-README.md').write_text("# 1944: The Loop Master — LLAPI / SNAC experimental\n\nIndependent MiSTer-LLAPI integration of Jotego's CPS2 core, configured specifically for 1944 (Europe 000620). Original author notices and licenses are retained. This is not an official Jotego release. No game ROMs, keys or QSound firmware binaries are included; supply your own compatible 1944.zip and qsound.zip. The MRA references and loader metadata remain those of the official Euro MRA.\n\nRequires a compatible MiSTer with at least 64 MB SDRAM for 1944's graphics. Keep the physical DE10-Nano SW1 OFF for SNAC, as the standard framework uses some USER pins for I2S when it is ON.\n\n| USER / Serial port mode | Players |\n| --- | --- |\n| LLAPI 2P — default | 2 |\n| SNAC SATURN 1P | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB9 1P (Mega Drive 3/6-button) | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB15 2P (Ultimate SNAC DB15) | 2 |\n| SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |\n\nThe OSD pauses the game while open; closing it resumes unless manual pause is active. Physical hardware validation of this 1944 integration is pending. Tests of the 1943 version do not establish that 1944 works on hardware. Saturn is digital only; no Bliss-Box cable profiles, analog handshake or multitap.\n\nTwo game buttons: Shot and Bomb. SNES B shoots and A bombs; Select inserts that player's coin and Start starts that player. DB15 A/B are Shot/Bomb, Select/Start are per player. Mega Drive B shoots, A bombs, Mode (6-button) or Down+Start inserts a coin; release and use Start alone to start P1. Keyboard 5 inserts P1 coin; F5 lowers volume. The serial readers and existing LLAPI arcade start/coin convention are reused from 1943.\n\nMenu: SNES Down+Start+B, DB15 Start+C, Mega Drive Down+Start+B and Saturn Down+Start+B. SNES two-player wiring: shared latch USER0, P1 clock/data USER1/5, P2 clock/data USER3/6. Use an adapter for the selected protocol. See preserved source notices for LLAPI and the original Jotego/Antonio Villena DB15 reader.\n\nInstall matching RBF into _Arcade/cores/ and MRA into _Arcade/. The 1944 pilot uses a separate RBF prefix and does not replace 1943. Compilation and strict setup/hold/recovery/removal/pulse-width checks must pass before an experimental download is published. Reports, source commit and SHA256 manifest accompany the binaries. Please support https://patreon.com/jotego.\n")
+          Path('tests/llapi/1944-LLAPI-Test.mra').write_text('<!--          FPGA arcade hardware by Jotego\n\n              This core is available for hardware compatible with MiST and MiSTer\n              Other FPGA systems may be supported by the time you read this.\n              This work is not mantained by the MiSTer project. Please contact the\n              core author for issues and updates.\n\n              (c) Jose Tejada, 2026. Please support this research\n              Patreon: https://patreon.com/jotego\n\n              The author does not endorse or participate in illegal distribution\n              of copyrighted material. This work can be used with compatible\n              software. This software can be homebrew projects or legally\n              obtained memory dumps of compatible games.\n\n              This file license is GNU GPLv2.\n              You can read the whole license file in\n              https://opensource.org/licenses/gpl-2.0.php\n\n-->\n\n<misterromdescription>\n    <about author="jotego" webpage="https://patreon.com/jotego" twitter="@topapate" source="https://jotego/jtcores"/>\n    <rotation>horizontal</rotation>\n    <name>1944: The Loop Master (Europe 000620) — LLAPI Test</name>\n    <setname>1944</setname>\n    <mameversion>0282</mameversion>\n    <year>2000</year>\n    <manufacturer>Eighting / Raizing (Capcom license)</manufacturer>\n    <players>2</players>\n    <rbf>jt1944_llapi_snac</rbf>\n    <joystick>8</joystick>\n    <region>World</region>\n    <rom index="0" zip="1944.zip|qsound.zip" md5="None" address="0x30000000" asm_md5="57e1779f1b7ff9b65d631df05d5cebf0">\n        <!--  -->\n        <part>\n            00 06 80 06 80 26 80 76\n            FF FF FF FF FF FF FF FF\n            32 FF 00 02 04 06 26 28\n            2A 2C 2E 00 00 30 02 04\n            08 30 FF FF FF FF FF FF\n            FF FF FF FF </part>\n        <!-- key - starts at 0x0 - length 0x14 (5 bits) -->\n        <part name="1944.key" crc="5f22140e"/>\n        <!-- maincpu - starts at 0x14 - length 0x180000 (21 bits) -->\n        <part name="nffe.03" crc="7544b926"/>\n        <part name="nffe.04" crc="dba1c66e"/>\n        <part name="nffe.05" crc="d78d31d3"/>\n        <!-- audiocpu - starts at 0x180014 - length 0x20000 (17 bits) -->\n        <part name="nff.01" crc="d2e44318"/>\n        <!-- qsound - starts at 0x1A0014 - length 0x800000 (23 bits) -->\n        <interleave output="16">\n            <part name="nff.11m" crc="243e4e05" map="12"/>\n        </interleave>\n        <interleave output="16">\n            <part name="nff.12m" crc="4fcf1600" map="12"/>\n        </interleave>\n        <!-- gfx - starts at 0x9A0014 - length 0x1400000 (25 bits) -->\n        <interleave output="64">\n            <part name="nff.13m" crc="c9fca741" map="00000021"/>\n            <part name="nff.15m" crc="f809d898" map="00002100"/>\n            <part name="nff.17m" crc="15ba4507" map="00210000"/>\n            <part name="nff.19m" crc="3dd41b8c" map="21000000"/>\n        </interleave>\n        <interleave output="64">\n            <part name="nff.14m" crc="3fe3a54b" map="00000021"/>\n            <part name="nff.16m" crc="565cd231" map="00002100"/>\n            <part name="nff.18m" crc="63ca5988" map="00210000"/>\n            <part name="nff.20m" crc="21eb8f3b" map="21000000"/>\n        </interleave>\n        <!-- firmware - starts at 0x1DA0014 - length 0x2000 (13 bits) -->\n        <part name="dl-1425.bin" crc="d6cf5ef5" length="0x2000"/>\n        <!-- Total 0x1DA2014 bytes - 30344 kBytes -->\n    </rom>\n    <rom index="2">\n        <part>\n00 00 01 00 00 00 00 02 00 00 00 00 00 00 00 00\n01 03 00 02 00 00 00 00 00 00 00 00 00 00 00 00\n00 20 23 06 19 04 FF 44 39 31 34 34 45 20 52 55\n00 00 01 00 00 00 00 02 00 00 00 00 00 00 00 00\n01 03 00 02 00 00 00 00 00 00 00 00 00 00 00 00\n00 20 23 06 19 04 FF 44 39 31 34 34 45 20 52 55\n00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n</part>\n    </rom>\n    <nvram index="2" size="128"/>\n    <rom index="1">\n        <part>00 80</part>\n    </rom>\n    <switches page_id="1" page_name="Switches" base="16" default="ff,ff">\n        <DSWA/>\n        <DSWB/>\n        <DSWC/>\n    </switches>\n    <buttons names="Shot,Bomb,-,-,-,-,Start,Coin,Core credits" default="A,B,Start,Select,-" count="2"/>\n</misterromdescription>\n')
+          PYCODE
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cores/1944/cfg tests/llapi/build-1944.sh tests/llapi/check-1944-timing.py tests/llapi/1944-README.md tests/llapi/1944-LLAPI-Test.mra
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add dedicated 1944 CPS2 LLAPI/SNAC configuration with matching MRA'
+            git push origin HEAD:refs/heads/llapi-1944-test
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  controllers:
+    needs: source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            tests/llapi
+            modules/jtframe/target/mister/hdl
+            modules/jtframe/hdl
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Test arcade mapping and protocol compilation
+        run: |
+          iverilog -g2012 -s arcade_map_tb -o /tmp/llapi-map tests/llapi/arcade_map_tb.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
+          vvp /tmp/llapi-map
+          iverilog -g2012 -s snac_readers_tb -o /tmp/snac-readers tests/llapi/snac_readers_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+          vvp /tmp/snac-readers
+          iverilog -g2012 -s serial_modes_tb -o /tmp/serial-modes tests/llapi/serial_modes_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv modules/jtframe/target/mister/hdl/joydb15.v
+          vvp /tmp/serial-modes
+          iverilog -g2012 -s db15_reader_tb -o /tmp/db15 tests/llapi/db15_reader_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv modules/jtframe/target/mister/hdl/joydb15.v
+          vvp /tmp/db15
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          s=Path('modules/jtframe/target/mister/hdl/jtframe_mister.sv').read_text()
+          assert '.osd_shown      ( OSD_STATUS      )' in s
+          PYCODE
+          iverilog -g2012 -DMISTER -s osd_pause_tb -o /tmp/osd-pause tests/llapi/osd_pause_tb.sv modules/jtframe/hdl/jtframe_dip.v modules/jtframe/hdl/keyboard/jtframe_pause.v modules/jtframe/hdl/jtframe_toggle.v
+          vvp /tmp/osd-pause
+  build:
+    needs: [source, controllers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            cores/1944
+            cores/cps1
+            cores/cps15
+            cores/cps2
+            modules/jtframe
+            modules/jteeprom
+            modules/fx68k
+            modules/jtdsp16
+            modules/jt12
+            tests/llapi
+      - name: Fetch pinned public CPU and sound dependencies
+        run: git submodule update --init --recursive --depth 1 modules/fx68k modules/jtdsp16 modules/jt12
+      - name: Compile 1944 with strict timing acceptance
+        run: docker run --rm --network host --entrypoint /bin/bash -v "$GITHUB_WORKSPACE:/jtcores" -w /jtcores jotego/jtcore20 /jtcores/tests/llapi/build-1944.sh
+      - name: Preserve accepted RBF and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: 1944-LLAPI-pilot-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            pilot-build/
+            pilot-reports/
+            log/mister/
+            cores/1944/mister/output_files/*.summary
+            cores/1944/mister/output_files/*.sta.rpt
+  publish:
+    needs: [source,controllers,build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: 1944-LLAPI-pilot-${{ github.run_number }}
+          path: built
+      - name: Publish experimental 1944 only after tests and timing pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          p=Path('built/pilot-build/reports/timing-acceptance.json')
+          d=json.loads(p.read_text())
+          assert d['accepted'] and all(v>=0 for v in d['worst_slack_ns'].values())
+          m=Path('built/pilot-build/LE-ME.md')
+          m.write_text(m.read_text()+'\nCompiled source: '+__import__('os').environ['SOURCE_SHA']+'\n')
+          PYCODE
+          (cd built/pilot-build && zip -qr ../../1944-LLAPI-SNAC-experimental.zip .)
+          gh release create v1944-llapi-snac-20261029-experimental --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --title '1944 LLAPI + SNAC — experimental' --notes-file built/pilot-build/LE-ME.md 1944-LLAPI-SNAC-experimental.zip built/pilot-build/cores/*.rbf built/pilot-build/mra/1944-LLAPI-Test.mra built/pilot-build/SHA256SUMS built/pilot-build/SOURCE.txt built/pilot-build/reports/timing-acceptance.json
