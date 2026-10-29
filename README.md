@@ -1,3 +1,29 @@
+# MiSTer-LLAPI — 1943 experimental controller support
+
+This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Battle of Midway (Euro)** on MiSTer. The integration is experimental and currently limited to this core; it does not add LLAPI to every game in jtcores.
+
+[Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261029-2p) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
+
+| USER / Serial port mode | Players |
+| --- | --- |
+| **LLAPI 2P — default** | 2 |
+| SNAC SATURN 1P | 1 SNAC + optional USB P2 |
+| SNAC DB9 1P (Mega Drive) | 1 SNAC + optional USB P2 |
+| SNAC DB15 2P (original Jotego splitter) | 2 |
+| SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |
+
+LLAPI uses a dedicated USER-port controller path and synchronizes polling to the core's frame timing. No measured end-to-end latency claim is made. Only the selected protocol owns the physical port. The original Jotego DB15 splitter is retained. The Bliss-Box Saturn cable profile is currently removed.
+
+The SNES two-player adapter needs shared latch USER0, P1 clock/data USER1/USER5 and P2 clock/data USER3/USER6. B shoots, A bombs, Select inserts the corresponding coin and Start starts that player. Down+Start+B opens the menu from either SNES controller. DB15 uses Select/Start per player and Start+C for the menu. See the release instructions for all modes.
+
+Automated controller tests, FPGA compilation and all required timing checks passed. **The new SNAC modes still require physical validation.** The reported Mega Drive three-button hardware issue remains unresolved. Saturn support is digital only; analog 3D handshake, multitaps and Bliss-Box cable profiles are not included.
+
+Install through Update All with LLAPI enabled, or download the RBF and MRA together from the release. Supply your own compatible game ROMs; no ROM data is included. Reselect the serial-port mode after upgrading from earlier pilots.
+
+This is an independent experimental MiSTer-LLAPI fork, not an official Jotego release. Original authorship, history, source notices and licenses are preserved below and throughout the repository. Please support Jotego's FPGA research.
+
+---
+
 # JTCORES FPGA Arcade Hardware by Jose Tejada (@topapate)
 
 You can show your appreciation through
