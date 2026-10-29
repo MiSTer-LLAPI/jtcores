@@ -16,9 +16,13 @@ LLAPI uses a dedicated USER-port controller path and synchronizes polling to the
 
 The SNES two-player adapter needs shared latch USER0, P1 clock/data USER1/USER5 and P2 clock/data USER3/USER6. B shoots, A bombs, Select inserts the corresponding coin and Start starts that player. Down+Start+B opens the menu from either SNES controller. DB15 uses Select/Start per player and Start+C for the menu. See the release instructions for all modes.
 
-Automated controller tests, FPGA compilation and all required timing checks passed. **The new SNAC modes still require physical validation.** The reported Mega Drive three-button hardware issue remains unresolved. Saturn support is digital only; analog 3D handshake, multitaps and Bliss-Box cable profiles are not included.
+Automated controller tests, FPGA compilation and all required timing checks passed. **Mega Drive three-button and six-button controllers have now been tested successfully on hardware by RetroShopPT, including Start.** Other new SNAC modes still require physical validation. Saturn support is digital only; analog 3D handshake, multitaps and Bliss-Box cable profiles are not included.
 
 Install through Update All with LLAPI enabled, or download the RBF and MRA together from the release. Supply your own compatible game ROMs; no ROM data is included. Reselect the serial-port mode after upgrading from earlier pilots.
+
+### Mega Drive controls — hardware tested
+
+Both three-button and six-button Mega Drive controllers have been tested successfully by RetroShopPT. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **F5 was also reported working for coin insertion during the three-button test.**
 
 This is an independent experimental MiSTer-LLAPI fork, not an official Jotego release. Original authorship, history, source notices and licenses are preserved below and throughout the repository. Please support Jotego's FPGA research.
 
