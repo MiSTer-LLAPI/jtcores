@@ -47,9 +47,9 @@ Predefinição: **LLAPI**. Opções, por esta ordem: **SNAC SATURN**, **SNAC SEG
 - Saturn: apenas comando digital, cabo Saturn SNAC original. B dispara, C bomba, L moeda, Start P1.
 - SEGA: Mega Drive DB9 de 3 ou 6 botões, pinout Genesis SNAC oficial. B dispara, A bomba, Start P1, Baixo+Start moeda (Mode também funciona nos 6 botões). Um joystick DB9 Atari/Amiga não usa o mesmo protocolo.
 - DB15: leitor original Jotego/Antonio Villena, dois jogadores. A/B jogo, Select moeda, Start inicia o jogador correspondente, Start+C abre o menu. USER0=LOAD, USER1=CLOCK, USER5=DATA, como no original. O divisor foi inicializado e as atribuições sequenciais normalizadas para eliminar corridas de simulação, sem mudar o protocolo.
-- SNES: B dispara, A bomba, Select moeda, Start P1.
+- SNES: dois comandos SNAC independentes. Latch comum USER0; P1 clock/data USER1/USER5; P2 clock/data USER3/USER6, como no core SNES oficial. B dispara, A bomba, Select insere moeda do jogador e Start inicia o jogador correspondente. Requer adaptador SNAC SNES de duas portas com estas ligações; um splitter passivo que duplica a mesma linha DATA não dá dois jogadores independentes.
 
-Nos modos Saturn/SEGA/SNES: Baixo+Start+disparo abre o menu, USB1 preenche P2. No DB15 ambos os jogadores vêm do splitter original. LLAPI mantém o encaminhamento anterior. Não ligar adaptadores LLAPI e SNAC simultaneamente à mesma porta.
+Nos modos Saturn/SEGA: Baixo+Start+disparo abre o menu, USB1 preenche P2. No SNES, ambos os jogadores vêm do adaptador SNAC; Baixo+Start+B em qualquer comando abre o menu. Sem segundo comando SNES, P2 fica sem entrada SNAC; não há deteção automática segura para alternar para USB, porque idle e desligado devolvem o mesmo nível. No DB15 ambos os jogadores vêm do splitter original. LLAPI mantém o encaminhamento anterior. Não ligar adaptadores LLAPI e SNAC simultaneamente à mesma porta.
 
 O switch físico SW1 do DE10-Nano tem de estar OFF para a porta USER funcionar como SNAC. No framework MiSTer original, SW1 ON encaminha áudio I2S para USER2/4/5 e mascara essas entradas, incluindo TH e dados do comando SEGA.
 

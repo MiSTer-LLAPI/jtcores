@@ -8,15 +8,16 @@ module serial_modes_tb;
     wire [15:0] joy1,joy2;
     wire [3:0] start,coin;
     wire osd;
-    reg [15:0] snes_pressed=0;
-    integer snes_bit=0;
-    wire [6:0] snes_pins={1'b1,(mode==4 ? (pins[0] ? ~snes_pressed[0] : ~snes_pressed[snes_bit]) : 1'b1),5'b11111};
+    reg [15:0] snes_pressed=0,snes2_pressed=0;
+    integer snes_bit=0,snes2_bit=0;
+    wire [6:0] snes_pins={(mode==4 ? (pins[0] ? ~snes2_pressed[0] : ~snes2_pressed[snes2_bit]) : 1'b1),(mode==4 ? (pins[0] ? ~snes_pressed[0] : ~snes_pressed[snes_bit]) : 1'b1),5'b11111};
     reg [5:0] md_high=6'h3f;
     reg [1:0] md_as=2'b11;
     wire [5:0] md_data=pins[4] ? md_high : {md_as,2'b00,md_high[1:0]};
     wire [6:0] input_pins=mode==2 ?
         {md_data[5],md_data[2],1'b1,md_data[3],md_data[4],md_data[0],md_data[1]} : snes_pins;
-    always @(negedge pins[0]) snes_bit=0;
+    always @(negedge pins[0]) begin snes_bit=0;snes2_bit=0;end
+    always @(negedge pins[3]) if(mode==4 && !pins[0] && snes2_bit<15) snes2_bit=snes2_bit+1;
     always @(negedge pins[1]) if(mode==4 && !pins[0] && snes_bit<15) snes_bit=snes_bit+1;
     task scan;begin repeat(150000) @(negedge clk50);end endtask
     jtframe_serial_arcade dut(.clk_50(clk50),.clk_sys(clksys),.rst(1'b0),
@@ -34,9 +35,17 @@ module serial_modes_tb;
         if(mode!=0 || pins[2]!==0) $fatal(1,"LLAPI is not the initial active mode");
         if(joy1!==16'h1234 || joy2!==16'h5678) $fatal(1,"LLAPI USB fallback regressed");
         choose(4);
-        if(pins[6:2]!==5'b11111 || joy2!==16'h1234) $fatal(1,"SNES pin allocation or USB P2");
+        if((pins|7'h0b)!==7'h7f || joy2!==0) $fatal(1,"SNES dual-port pins or idle P2");
         snes_pressed=(1<<0)|(1<<4)|(1<<2); scan();
         if(joy1!==16'h18 || coin!==1 || start!==0) $fatal(1,"SNAC game/coin routing");
+        snes2_pressed=(1<<8)|(1<<7)|(1<<2)|(1<<3);scan();
+        if(joy1!==16'h18 || joy2!==16'h21 || start!==2 || coin!==3)
+            $fatal(1,"independent SNES P1/P2 and P2 Start/coin");
+        snes2_pressed=0;scan();
+        if(joy2 || coin!==1 || start) $fatal(1,"P2 release changed P1");
+        snes2_pressed=(1<<0)|(1<<3)|(1<<5);scan();
+        if(!osd || joy1 || joy2 || start || coin) $fatal(1,"P2 SNES menu/inhibit");
+        snes2_pressed=0;
         snes_pressed=(1<<8)|(1<<3); scan();
         if(joy1!==16'h20 || start!==1 || coin!==0) $fatal(1,"SNAC Start routing");
         snes_pressed=(1<<0)|(1<<3)|(1<<5); scan();
