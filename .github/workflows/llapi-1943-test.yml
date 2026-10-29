@@ -71,8 +71,10 @@ jobs:
           vvp /tmp/llapi-map
           iverilog -g2012 -s snac_readers_tb -o /tmp/snac-readers tests/llapi/snac_readers_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
           vvp /tmp/snac-readers
-          iverilog -g2012 -s serial_modes_tb -o /tmp/serial-modes tests/llapi/serial_modes_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
+          iverilog -g2012 -s serial_modes_tb -o /tmp/serial-modes tests/llapi/serial_modes_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv modules/jtframe/target/mister/hdl/joydb15.v
           vvp /tmp/serial-modes
+          iverilog -g2012 -s db15_reader_tb -o /tmp/db15 tests/llapi/db15_reader_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv modules/jtframe/target/mister/hdl/joydb15.v
+          vvp /tmp/db15
   build:
     needs: [source, controllers]
     runs-on: ubuntu-24.04
