@@ -40,7 +40,7 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
 {{ if .JTFRAME_OSD_VOL }}           O67,FX volume,high,highest,lowest,low; {{ end }}
 {{ if .JTFRAME_OSD_TEST }}          OA,Service mode,Off,On; {{ end }}
 {{ if .JTFRAME_DIAL }}              o03,Sensitivity,high,highest,lowest,low;{{end}}
-{{ if .JTFRAME_LLAPI }} oTV,Serial port,LLAPI,SNAC SATURN,SNAC SEGA,SNAC DB15,SNAC SNES;
+{{ if .JTFRAME_LLAPI }} oTV,Serial port,LLAPI 2P,SNAC SATURN 1P,SNAC DB9 1P,SNAC DB15 2P,SNAC SNES 2P;
 {{ else }}
 {{ if .JTFRAME_UART }}
     {{ if .JTFRAME_NO_DB15 }}       o6,User port,Off,UART; {{ else }}
