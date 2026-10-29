@@ -826,7 +826,12 @@ jtframe_board #(
     .rotate         ( rotate          ),
     .rot_osdonly    (                 ),
     // LED
+`ifdef JTFRAME_LLAPI
+    // Pause while OSD is open without toggling the manual pause latch.
+    .osd_shown      ( OSD_STATUS      ),
+`else
     .osd_shown      ( 1'b0            ),
+`endif
     .led            ( LED             ),
     // UART
     .uart_rx        ( uart_rx         ),
