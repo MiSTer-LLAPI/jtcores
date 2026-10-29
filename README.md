@@ -7,9 +7,9 @@ This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Bat
 | USER / Serial port mode | Players |
 | --- | --- |
 | **LLAPI 2P — default** | 2 |
-| SNAC SATURN 1P | 1 SNAC + optional USB P2 |
-| SNAC DB9 1P (Mega Drive) | 1 SNAC + optional USB P2 |
-| SNAC DB15 2P (original Jotego splitter) | 2 |
+| SNAC SATURN 1P | 1 SNAC + optional USB / GAMEPORT P2 |
+| SNAC DB9 1P (Mega Drive) | 1 SNAC + optional USB / GAMEPORT P2 |
+| SNAC DB15 2P (Ultimate SNAC DB15) | 2 |
 | SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |
 
 LLAPI uses a dedicated USER-port controller path and synchronizes polling to the core's frame timing. No measured end-to-end latency claim is made. Only the selected protocol owns the physical port. The original Jotego DB15 splitter is retained. The Bliss-Box Saturn cable profile is currently removed.
