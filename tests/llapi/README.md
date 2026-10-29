@@ -40,26 +40,17 @@ Teste físico a fazer: cada porta isoladamente, ambas juntas, dois disparos dife
 
 Mantém os créditos, cabeçalhos e licenças dos projetos de origem. Isto é uma integração experimental independente; não é uma release oficial de Jotego.
 
-## Opções SNAC digitais
+## Serial port — 2026-10-29
 
-Esta variante acrescenta leitores de comandos digitais através dos adaptadores SNAC e pinouts dos cores oficiais SNES, Genesis e Saturn. O menu **Serial port** usa bits 63:62 (predefinição 0 = LLAPI), sem alterar os bits originais de vídeo/UART. Durante a mudança de protocolo, todos os pinos são libertados durante 150 us; os módulos inativos não conduzem a porta.
+Predefinição: **LLAPI**. Opções, por esta ordem: **SNAC SATURN**, **SNAC SEGA**, **SNAC DB15**, **SNAC SNES**. Campo status 63:61. O perfil e o seletor de cabo Bliss-Box foram retirados; a compatibilidade Bliss-Box fica adiada. Selecionar novamente o protocolo depois de carregar esta versão, pois o campo do menu mudou.
 
-- **SNAC SNES:** comando digital SNES. Disparo B, bomba A; Select insere moeda; Start inicia P1.
-- **SNAC Mega Drive:** comandos de 3/6 botões. Disparo B, bomba A; Mode (6 botões) ou Baixo+Start insere moeda; Start inicia P1.
-- **SNAC Saturn:** comando digital Saturn (ou 3D Pad na posição digital). Disparo B, bomba C; L insere moeda; Start inicia P1. O modo analógico/handshake do 3D Pad, periféricos e multitaps não estão implementados neste leitor arcade.
+- Saturn: apenas comando digital, cabo Saturn SNAC original. B dispara, C bomba, L moeda, Start P1.
+- SEGA: Mega Drive DB9 de 3 ou 6 botões, pinout Genesis SNAC oficial. B dispara, A bomba, Start P1, Baixo+Start moeda (Mode também funciona nos 6 botões). Um joystick DB9 Atari/Amiga não usa o mesmo protocolo.
+- DB15: leitor original Jotego/Antonio Villena, dois jogadores. A/B jogo, Select moeda, Start inicia o jogador correspondente, Start+C abre o menu. USER0=LOAD, USER1=CLOCK, USER5=DATA, como no original. O divisor foi inicializado e as atribuições sequenciais normalizadas para eliminar corridas de simulação, sem mudar o protocolo.
+- SNES: B dispara, A bomba, Select moeda, Start P1.
 
-Menu: **Baixo + Start + disparo**, nos três modos. A combinação de menu não envia disparo/Start/moeda ao jogo. SNAC ocupa P1; o primeiro comando USB passa a P2. O teclado continua disponível. Os adaptadores/cabos SNAC têm de corresponder ao sistema selecionado. O protocolo de um adaptador SNAC não é o LLAPI de um BlisSTer.
+Nos modos Saturn/SEGA/SNES: Baixo+Start+disparo abre o menu, USB1 preenche P2. No DB15 ambos os jogadores vêm do splitter original. LLAPI mantém o encaminhamento anterior. Não ligar adaptadores LLAPI e SNAC simultaneamente à mesma porta.
 
-Os leitores SNAC fazem uma leitura periódica a cada 2,5 ms, adequada ao protocolo digital e ao tempo de reposição dos comandos Mega Drive de 6 botões. Não é uma medição de latência nem a reprodução de uma interface nativa do arcade 1943.
+O switch físico SW1 do DE10-Nano tem de estar OFF para a porta USER funcionar como SNAC. No framework MiSTer original, SW1 ON encaminha áudio I2S para USER2/4/5 e mascara essas entradas, incluindo TH e dados do comando SEGA.
 
-Pinout verificado nas fontes MiSTer-devel/SNES_MiSTer (SNES.sv), Genesis_MiSTer (Genesis.sv) e Saturn_MiSTer (Saturn.sv). Ordem dos nibbles Saturn comparada também com joydb9saturn.v de Timothy Redaelli, em MiSTer-DB9/jtcores. Mantidos os créditos de todos os projetos.
-
-Testes locais adicionais: modelos de comandos ao nível dos pinos (arestas SNES, handshake MD de 3/6 botões, identificação/nibbles Saturn), comando desligado, libertação da porta, mudança dos quatro modos, regresso ao LLAPI, fallback USB e encaminhamento de jogo/moeda/Start/menu através do leitor SNES completo. Falta teste físico desta nova variante nos três adaptadores.
-
-### Saturn HDMI Bliss-Box / SNAC Mini
-
-O perfil **Bliss-Box HDMI digital** remapeia os sinais para o cabo Saturn de entrada da Bliss-Box ligado diretamente a um SNAC Mini HDMI original: TH=USER5, TR=USER4 e D3..D0=USER3..USER0. A linha TL do cabo está no HDMI10, que o Mini original não encaminha; o leitor de comandos digitais de quatro fases não precisa dessa linha. Não suporta o handshake do 3D Pad em modo analógico. A compatibilidade física desta ligação direta ainda precisa de teste real.
-
-Também está documentado um interposer passivo completo em `Saturn-BlissBox-adapter.md`. Esse interposer remapeia os sete sinais e permite usar o perfil **SNAC original** com o cabo Bliss-Box. No perfil Bliss-Box direto não se usa o interposer.
-
-Fontes: esquema `snac/SNAC hdmi-mini.sch` de blue212/SNAC; coluna Saturn da tabela de cabos Bliss-Box publicada por ulao; sinais físicos Saturn descritos por Plutiedev. A identificação correta é TH no pino Saturn 4 e TL no pino Saturn 6; a numeração da imagem da tabela do cabo é invertida em relação aos números do conector Saturn. Os testes simulam ambas as ligações ao nível dos sinais e a mudança do pinout com a porta libertada.
+Testes: cada direção e A/B/C/Start do Mega Drive de 3 botões; handshake de 6 botões; Saturn original; SNES; ambos os jogadores do DB15 com modelo de registo de deslocamento externo; Start/moeda/menu; mudança de protocolo com 150 us de libertação e regresso ao LLAPI. Estes testes não substituem validação física do adaptador e comando do utilizador.

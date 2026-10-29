@@ -11,7 +11,7 @@ module joy_db15
  output [15:0] joystick2
 );
 //Gestion de Joystick
-reg [15:0] JCLOCKS;
+reg [15:0] JCLOCKS = 0; // deterministic divider start in FPGA and simulation
 always @(posedge clk) begin 
    JCLOCKS <= JCLOCKS + 1'd1;
 end
@@ -29,14 +29,14 @@ assign JOY_CLK = JCLOCKS[3]; //con 3 Funciona = 3Mhz
 assign JOY_LOAD = joy_renew;
 always @(posedge JOY_CLK) begin 
     if (joy_count == 5'd0) begin
-       joy_renew = 1'b0;
+       joy_renew <= 1'b0;
     end else begin
-       joy_renew = 1'b1;
+       joy_renew <= 1'b1;
     end
     if (joy_count == 5'd25) begin
-      joy_count = 5'd0;
+      joy_count <= 5'd0;
     end else begin
-      joy_count = joy_count + 1'd1;
+      joy_count <= joy_count + 1'd1;
     end      
 end
 always @(posedge JOY_CLK) begin

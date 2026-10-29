@@ -5,13 +5,13 @@
 // reader in MiSTer-DB9/jtcores; this is a single-port SNAC implementation.
 module jtframe_serial_arcade #(parameter BUTTONS=3)(
     input clk_50,clk_sys,rst,vblank,osd_active,
-    input [1:0] mode,
-    input saturn_blissbox,
+    input [2:0] mode, // 0 LLAPI, 1 Saturn, 2 SEGA, 3 original DB15, 4 SNES
     input [6:0] user_in,
     output [6:0] user_out,
     input [15:0] usb1,usb2,
     output [15:0] joy1,joy2,
     output [3:0] start,coin,
+    output db15_drive,
     output osd_request
 );
     (* async_reg="true" *) reg [2:0] mode_meta=0,mode50=0;
@@ -19,7 +19,7 @@ module jtframe_serial_arcade #(parameter BUTTONS=3)(
     reg [12:0] settle=7500;
     wire ready50=(settle==0) && mode50==previous_mode;
     always @(posedge clk_50) begin
-        mode_meta<={saturn_blissbox,mode}; mode50<=mode_meta;
+        mode_meta<=mode; mode50<=mode_meta;
         previous_mode<=mode50;
         if(mode50!=previous_mode) settle<=13'd7500; // 150 us released
         else if(settle!=0) settle<=settle-1'b1;
@@ -30,36 +30,53 @@ module jtframe_serial_arcade #(parameter BUTTONS=3)(
     wire llapi_osd;
     jtframe_llapi_arcade #(.BUTTONS(BUTTONS)) u_llapi(
         .clk_50(clk_50),.clk_sys(clk_sys),.rst(rst),.vblank(vblank),
-        .enable(ready50 && mode50[1:0]==0),.osd_active(osd_active),
+        .enable(ready50 && mode50==0),.osd_active(osd_active),
         .user_in(user_in),.user_out(llapi_out),.usb1(usb1),.usb2(usb2),
         .joy1(llapi_joy1),.joy2(llapi_joy2),.start(llapi_start),
         .coin(llapi_coin),.osd_request(llapi_osd));
     wire [8:0] snac_pad;
+    wire [1:0] reader_mode=mode50==1 ? 3 : mode50==2 ? 2 : mode50==4 ? 1 : 0;
     jtframe_snac_arcade u_snac(.clk_50(clk_50),
-        .enable(ready50 && mode50[1:0]!=0),.mode(mode50[1:0]),.saturn_blissbox(mode50[2]),
+        .enable(ready50 && reader_mode!=0),.mode(reader_mode),
         .user_in(user_in),.user_out(snac_out),.pad(snac_pad));
     // Only one mux drives the physical connector. Inactive readers cannot
     // drive pins, and all pins are released while changing protocol.
-    assign user_out=!ready50 ? 7'h7f : mode50[1:0]==0 ? llapi_out : snac_out;
-    (* async_reg="true" *) reg [8:0] pad_meta=0,pad_sys=0;
+    assign db15_drive=ready50 && mode50==3;
+    wire db_clk,db_load;
+    wire [15:0] db1,db2;
+    // Preserve Jotego's original Antonio Villena DB15 splitter reader.
+    joy_db15 u_db15(.clk(clk_50),.JOY_CLK(db_clk),.JOY_LOAD(db_load),
+        .JOY_DATA(user_in[5]),.joystick1(db1),.joystick2(db2));
+    wire [8:0] port1=mode50==3 ? {db1[11:10],db1[6:0]} : snac_pad;
+    wire [8:0] port2=mode50==3 ? {db2[11:10],db2[6:0]} : 9'd0;
+    assign user_out=!ready50 ? 7'h7f : mode50==0 ? llapi_out :
+                    mode50==3 ? {5'h1f,db_clk,db_load} : snac_out;
+    (* async_reg="true" *) reg [8:0] pad_meta=0,pad_sys=0,pad2_meta=0,pad2_sys=0;
     (* async_reg="true" *) reg [2:0] active_meta=0,active_sys=0;
     (* async_reg="true" *) reg ready_meta=0,ready_sys=0;
     always @(posedge clk_sys) begin
-        pad_meta<=snac_pad; pad_sys<=pad_meta;
+        pad_meta<=port1; pad_sys<=pad_meta;
+        pad2_meta<=port2; pad2_sys<=pad2_meta;
         active_meta<=mode50; active_sys<=active_meta;
         ready_meta<=ready50; ready_sys<=ready_meta;
     end
-    wire stable=ready_sys && active_sys=={saturn_blissbox,mode};
-    wire snac_selected=stable && active_sys[1:0]!=0;
-    wire snac_menu=snac_selected && pad_sys[2] && pad_sys[7] && pad_sys[4];
+    wire stable=ready_sys && active_sys==mode;
+    wire snac_selected=stable && active_sys!=0 && active_sys<=4;
+    wire db15_selected=stable && active_sys==3;
+    wire snac_menu=snac_selected && (db15_selected ?
+        ((pad_sys[7] && pad_sys[6]) || (pad2_sys[7] && pad2_sys[6])) :
+        (pad_sys[2] && pad_sys[7] && pad_sys[4]));
     wire inhibit=osd_active || snac_menu;
     assign joy1=!stable ? usb1 : !snac_selected ? llapi_joy1 :
                  inhibit ? 16'd0 : {9'd0,pad_sys[6:0]};
-    assign joy2=!stable ? usb2 : snac_selected ? usb1 : llapi_joy2;
+    assign joy2=!stable ? usb2 : db15_selected ?
+                 (inhibit ? 16'd0 : {9'd0,pad2_sys[6:0]}) :
+                 snac_selected ? usb1 : llapi_joy2;
     assign start=!stable ? 4'd0 : !snac_selected ? llapi_start :
-                 {3'd0,pad_sys[7] && !pad_sys[8] && !inhibit};
+                 {2'd0,db15_selected && pad2_sys[7] && !inhibit,
+                  pad_sys[7] && (!pad_sys[8] || db15_selected) && !inhibit};
     assign coin=!stable ? 4'd0 : !snac_selected ? llapi_coin :
-                 {3'd0,pad_sys[8] && !inhibit};
+                 {2'd0,db15_selected && pad2_sys[8] && !inhibit,pad_sys[8] && !inhibit};
     assign osd_request=stable && (snac_selected ? snac_menu : llapi_osd);
 endmodule
 
@@ -69,7 +86,6 @@ module jtframe_snac_arcade #(
 )(
     input clk_50,enable,
     input [1:0] mode, // 1 SNES, 2 Mega Drive, 3 Saturn digital
-    input saturn_blissbox, // digital-only direct HDMI cable layout
     input [6:0] user_in,
     output reg [6:0] user_out=7'h7f,
     // [8] coin, [7] start, [6:4] buttons, [3:0] UDLR, active high
@@ -87,10 +103,10 @@ module jtframe_snac_arcade #(
     reg [3:0] md_extra=4'hf;
     reg [3:0] sat_extra=4'hf,sat_main=4'hf,sat_dir=4'hf;
     wire [5:0] md_in={input_sync[6],input_sync[2],input_sync[3],input_sync[5],input_sync[0],input_sync[1]}; // C B R L D U
-    wire [3:0] sat_in=saturn_blissbox ? input_sync[3:0] : {input_sync[3],input_sync[5],input_sync[0],input_sync[1]}; // D3..D0
+    wire [3:0] sat_in={input_sync[3],input_sync[5],input_sync[0],input_sync[1]}; // D3..D0
     always @(posedge clk_50) begin
-        old_mode<={saturn_blissbox,mode};
-        if(!enable || mode==0 || {saturn_blissbox,mode}!=old_mode) begin
+        old_mode<={1'b0,mode};
+        if(!enable || mode==0 || {1'b0,mode}!=old_mode) begin
             ticks<=0; phase<=0; user_out<=7'h7f; pad<=0;
             snes<=16'hffff; md_valid<=0; md_six<=0;
             md_high<=6'h3f; md_as<=2'b11; md_extra<=4'hf;
@@ -141,14 +157,11 @@ module jtframe_snac_arcade #(
                 3: begin
                     // Saturn digital: TH=USER4, TR=USER6; D3..0 use
                     // USER3,5,0,1. TL/USER2 is released (input).
-                    // Bliss-Box direct: TH=USER5, TR=USER4, D3..0=USER3..0.
-                    // TL is HDMI10 (unrouted on original Mini); digital
-                    // four-phase pads do not use that handshake line.
                     case(phase)
-                        0: user_out<=saturn_blissbox ? 7'h4f : 7'h2f; // TH=0, TR=0
-                        1: begin sat_extra<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=1; end
-                        2: begin sat_main<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=0; user_out[saturn_blissbox ? 4 : 6]<=1; end
-                        3: begin sat_dir<=sat_in; user_out[saturn_blissbox ? 5 : 4]<=1; end
+                        0: user_out<=7'h2f; // TH=0, TR=0
+                        1: begin sat_extra<=sat_in; user_out[4]<=1; end
+                        2: begin sat_main<=sat_in; user_out[4]<=0; user_out[6]<=1; end
+                        3: begin sat_dir<=sat_in; user_out[4]<=1; end
                         4: begin
                             // Digital pad ID: final phase is {L,1,0,0}.
                             // Reject an analog-handshake pad instead of
