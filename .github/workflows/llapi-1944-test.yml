@@ -30,6 +30,9 @@ jobs:
           src=Path('cores/cps2/cfg'); dst=Path('cores/1944/cfg')
           assert src.is_dir()
           if not dst.exists():shutil.copytree(src,dst)
+          hdl=Path('cores/1944/hdl'); hdl.mkdir(exist_ok=True)
+          for init in Path('cores/cps2/hdl').glob('*.hex'):
+              shutil.copy2(init,hdl/init.name)
           p=dst/'macros.def'; s=p.read_text()
           marker='# MiSTer-LLAPI 1944 experimental configuration'
           if marker not in s:
@@ -48,7 +51,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cores/1944/cfg tests/llapi/build-1944.sh tests/llapi/check-1944-timing.py tests/llapi/1944-README.md
-          git add -f tests/llapi/1944-LLAPI-Test.mra
+          git add -f tests/llapi/1944-LLAPI-Test.mra cores/1944/hdl/*.hex
           if ! git diff --cached --quiet; then
             git commit -m 'Add dedicated 1944 CPS2 LLAPI/SNAC configuration with matching MRA'
             git push origin HEAD:refs/heads/llapi-1944-test
