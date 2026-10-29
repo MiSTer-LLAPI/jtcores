@@ -12,7 +12,7 @@ Requires a compatible MiSTer with at least 64 MB SDRAM for 1944's graphics. Keep
 | SNAC DB15 2P (Ultimate SNAC DB15) | 2 |
 | SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |
 
-The OSD pauses the game while open; closing it resumes unless manual pause is active. Physical hardware validation of this 1944 integration is pending. Tests of the 1943 version do not establish that 1944 works on hardware. Saturn is digital only; no Bliss-Box cable profiles, analog handshake or multitap.
+The OSD pauses the game while open; closing it resumes unless manual pause is active. LLAPI P1 and SNAC SNES 2P were tested by UltimateMiSTer on the previous build. Hold X on SNES via LLAPI or SNAC SNES for autofire; release to stop. This new autofire revision needs hardware validation. LLAPI port 2 remains under investigation and its routing is unchanged. Tests of the 1943 version do not establish that 1944 works on hardware. Saturn is digital only; no Bliss-Box cable profiles, analog handshake or multitap.
 
 Two game buttons: Shot and Bomb. SNES B shoots and A bombs; Select inserts that player's coin and Start starts that player. DB15 A/B are Shot/Bomb, Select/Start are per player. Mega Drive B shoots, A bombs, Mode (6-button) or Down+Start inserts a coin; release and use Start alone to start P1. Keyboard 5 inserts P1 coin; F5 lowers volume. The serial readers and existing LLAPI arcade start/coin convention are reused from 1943.
 
