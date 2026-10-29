@@ -144,8 +144,11 @@ jobs:
           r=Path('release');r.mkdir()
           shutil.copy2(p/'cores/jt1943_llapi_snac_20261029_test.rbf',r/'jt1943_llapi_snac_20261029_pause.rbf')
           m=(p/'mra/1943-LLAPI-SNAC-Test.mra').read_text()
-          assert 'jt1943_llapi_snac_20261029' in m
-          (r/'1943-LLAPI-SNAC-Test.mra').write_text(m.replace('jt1943_llapi_snac_20261029','jt1943_llapi_snac_20261029_pause'))
+          import xml.etree.ElementTree as ET
+          tree=ET.fromstring(m)
+          assert tree.findtext('rbf')=='jt1943_llapi_snac'
+          tree.find('rbf').text='jt1943_llapi_snac_20261029_pause'
+          ET.ElementTree(tree).write(r/'1943-LLAPI-SNAC-Test.mra',encoding='utf-8',xml_declaration=True)
           shutil.copy2(p/'reports/timing-acceptance.json',r/'timing-acceptance.json')
           shutil.copy2(p/'SOURCE.txt',r/'SOURCE.txt')
           notes="## 1943 LLAPI + SNAC — experimental two-player build\n\nThis build pauses Jotego's 1943 automatically while the OSD menu is open and resumes when it closes. A manual pause remains active after closing the menu. The change is limited to this LLAPI integration. **LLAPI 2P is the default.**\n\n| USER / Serial port mode | Players |\n| --- | --- |\n| **LLAPI 2P — default** | 2 |\n| SNAC SATURN 1P | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB9 1P (Mega Drive) | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB15 2P (Ultimate SNAC DB15) | 2 |\n| SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |\n\nThe Bliss-Box cable profile and cable selector are removed. No analog Saturn 3D handshake or SNES multitap support is included. A passive splitter that duplicates a single SNES data signal cannot provide independent players.\n\n### SNES two-player wiring and controls\n\nShared latch: USER0. Player 1 clock/data: USER1/USER5. Player 2 clock/data: USER3/USER6, matching the official SNES core. B shoots, A bombs, Select inserts that player's coin and Start starts the corresponding player. Down+Start+B opens the menu from either controller. In SNES mode P2 is SNAC, not USB.\n\nDB15 uses the original Jotego splitter protocol and pinout. Select and Start apply to the corresponding player; Start+C opens the menu. LLAPI retains the existing arcade convention and USB fallback.\n\n### Mega Drive controls — hardware tested\n\nBoth three-button and six-button Mega Drive controllers have been tested successfully by UltimateMiSTer. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **Keyboard: press 5 to insert a P1 coin (not F5; F5 lowers the volume).**\n\n### Validation and limitations\n\nController simulations passed, including automatic OSD pause/resume and preservation of manual pause. Compilation and all timing checks passed; exact margins are included in the attached timing-acceptance.json.\n\n**The preceding SNES 2P build was physically tested and confirmed working by UltimateMiSTer in these controller modes: LLAPI 2P, SNAC SATURN 1P, SNAC DB9 1P (Mega Drive three-button and six-button), SNAC DB15 2P (Ultimate SNAC DB15), and SNAC SNES 2P.** The earlier three-button report was resolved by inserting a coin before starting. **The new automatic OSD pause change still needs physical confirmation.**\n\n### Download and install\n\nUse the attached ZIP, or the matching RBF and MRA. Copy the RBF to `_Arcade/cores/` and the MRA to `_Arcade/`. The LLAPI Update All catalog installs the current build as `_LLAPI/_Arcade/1943-LLAPI-Test.mra`. Supply your own compatible Euro `1943.zip`; no ROM data is included. Reselect the serial protocol after upgrading from an earlier pilot.\n\nExact compiled source: SOURCE_SHA_PLACEHOLDER. Build and tests: RUN_URL_PLACEHOLDER.\n\nIndependent experimental fork of [Jotego's jtcores](https://github.com/jotego/jtcores), using the existing MiSTer-LLAPI arcade protocol. Original credits, licenses and upstream history are preserved. This is not an official Jotego release.\n"
@@ -155,3 +158,18 @@ jobs:
           PYCODE
           (cd release && zip -q ../1943-LLAPI-SNAC-OSD-pause.zip *)
           gh release create v1943-llapi-snac-20261029-osd-pause --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --title '1943 LLAPI + SNAC — automatic OSD pause experimental' --notes-file release/Release-notes.md 1943-LLAPI-SNAC-OSD-pause.zip release/jt1943_llapi_snac_20261029_pause.rbf release/1943-LLAPI-SNAC-Test.mra release/SHA256SUMS.txt release/timing-acceptance.json release/SOURCE.txt
+          gh api "repos/$GITHUB_REPOSITORY/contents/README.md?ref=master" > /tmp/root-readme.json
+          python3 - <<'PYCODE'
+          import base64,json
+          from pathlib import Path
+          m=json.loads(Path('/tmp/root-readme.json').read_text())
+          s=base64.b64decode(m['content']).decode()
+          s=s.replace('v1943-llapi-snac-20261029-2p','v1943-llapi-snac-20261029-osd-pause')
+          s=s.replace('**All controller modes have been physically tested and confirmed working by UltimateMiSTer:', '**The preceding SNES 2P build was physically tested and confirmed working by UltimateMiSTer in all controller modes:')
+          notice='The current build automatically pauses while the OSD menu is open and resumes when it closes. A manual pause remains active after closing OSD. The new OSD-pause change has passed regression tests and timing checks; physical confirmation of this change is pending.\n\n'
+          if notice not in s:
+              assert '| USER / Serial port mode | Players |' in s
+              s=s.replace('| USER / Serial port mode | Players |',notice+'| USER / Serial port mode | Players |',1)
+          Path('/tmp/readme-update.json').write_text(json.dumps({'message':'Document automatic OSD pause and preserve previous hardware test attribution','branch':'master','sha':m['sha'],'content':base64.b64encode(s.encode()).decode()}))
+          PYCODE
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/README.md" --input /tmp/readme-update.json > /dev/null
