@@ -16,43 +16,39 @@ jobs:
     outputs:
       sha: ${{ steps.source.outputs.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 3
-      - name: Import verified source on the experimental branch
+      - name: Commit focused OSD pause fix and regression test
         id: source
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = llapi-1943-test
-          if test -f source-import.json; then
-            python3 - <<'PY'
-          import hashlib, json, re
+          python3 - <<'PYCODE'
           from pathlib import Path
-          m = json.loads(Path('source-import.json').read_text())
-          assert re.fullmatch('[0-9a-f]{40}', m['commit'])
-          assert re.fullmatch('[0-9a-f]{40}', m['tree'])
-          assert re.fullmatch('[0-9a-f]{64}', m['sha256'])
-          assert hashlib.sha256(Path('jt1943-llapi.bundle').read_bytes()).hexdigest() == m['sha256']
-          Path('/tmp/llapi-source').write_text(m['commit'] + '\n' + m['tree'] + '\n')
-          PY
-            mapfile -t expected < /tmp/llapi-source
-            # Later web commits can put the bundle prerequisite outside the
-            # shallow checkout. Fetch that exact public upstream base only.
-            git fetch --depth=1 origin b222692d4c0c9a26a6cb3c99c6820b1ed4a5d565
-            git bundle verify jt1943-llapi.bundle
-            git fetch ./jt1943-llapi.bundle refs/heads/llapi-1943-test
-            test "$(git rev-parse FETCH_HEAD)" = "${expected[0]}"
-            test "$(git rev-parse 'FETCH_HEAD^{tree}')" = "${expected[1]}"
-            # Keep both source histories, and only fast-forward this test branch.
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            imported=$(printf '%s\n' 'Import verified 1943 arcade LLAPI integration' | git commit-tree "${expected[1]}" -p "$GITHUB_SHA" -p "${expected[0]}")
-            git push origin "$imported:refs/heads/$GITHUB_REF_NAME"
-            echo "sha=$imported" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          p=Path('modules/jtframe/target/mister/hdl/jtframe_mister.sv')
+          s=p.read_text()
+          old="    .osd_shown      ( 1'b0            ),"
+          new="""`ifdef JTFRAME_LLAPI
+              // Pause while OSD is open without toggling the manual pause latch.
+              .osd_shown      ( OSD_STATUS      ),
+          `else
+              .osd_shown      ( 1'b0            ),
+          `endif"""
+          if new not in s:
+              assert s.count(old)==1, 'Unexpected OSD pause connection'
+              p.write_text(s.replace(old,new))
+          Path('tests/llapi/osd_pause_tb.sv').write_text('`timescale 1ns/1ps\nmodule osd_pause_tb;\n reg clk=0;always #5 clk=~clk;\n reg rst=1,key_pause=0,osd=0;wire manual_pause,dip_pause;\n jtframe_pause p(.clk(clk),.rst(rst),.key_pause(key_pause),.joy_pause(1\'b0),\n .osd_pause(1\'b0),.adv_frame(1\'b0),.lvbl(1\'b0),.game_pause(manual_pause));\n jtframe_dip d(.clk(clk),.status(64\'d0),.game_pause(manual_pause),.vertical(1\'b1),\n .dipflip_xor(1\'b0),.hdmi_arx(),.hdmi_ary(),.rotate(),.rot_osdonly(),.rot_control(),\n .osd_pause(),.osd_shown(osd),.game_test(1\'b1),.dip_test(),.dip_pause(dip_pause),.dip_flip(),.dip_fxlevel());\n task settle;begin repeat(8) @(negedge clk);end endtask\n task check(input run);begin settle();if(dip_pause!==run) $fatal(1,"pause state expected run=%b actual=%b",run,dip_pause);end endtask\n task toggle_manual;begin key_pause=1;settle();key_pause=0;settle();end endtask\n initial begin\n  settle();rst=0;check(1);\n  osd=1;check(0);osd=0;check(1);\n  repeat(3) begin osd=1;check(0);osd=0;check(1);end\n  toggle_manual();check(0);osd=1;check(0);osd=0;check(0);\n  toggle_manual();check(1);\n  osd=1;check(0);toggle_manual();check(0);osd=0;check(0);\n  toggle_manual();check(1);\n  $display("PASS OSD open/close, repeated entry, independent manual pause preserved");$finish;\n end\nendmodule\n')
+          PYCODE
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add modules/jtframe/target/mister/hdl/jtframe_mister.sv tests/llapi/osd_pause_tb.sv
+          if ! git diff --cached --quiet; then
+            git commit -m 'Pause the LLAPI 1943 core while OSD is open; preserve manual pause'
+            git push origin HEAD:refs/heads/llapi-1943-test
           fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   controllers:
     needs: source
     runs-on: ubuntu-24.04
@@ -64,6 +60,7 @@ jobs:
           sparse-checkout: |
             tests/llapi
             modules/jtframe/target/mister/hdl
+            modules/jtframe/hdl
       - run: sudo apt-get update && sudo apt-get install -y iverilog
       - name: Test arcade mapping and protocol compilation
         run: |
@@ -75,6 +72,13 @@ jobs:
           vvp /tmp/serial-modes
           iverilog -g2012 -s db15_reader_tb -o /tmp/db15 tests/llapi/db15_reader_tb.sv modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv modules/jtframe/target/mister/hdl/joydb15.v
           vvp /tmp/db15
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          s=Path('modules/jtframe/target/mister/hdl/jtframe_mister.sv').read_text()
+          assert '.osd_shown      ( OSD_STATUS      )' in s
+          PYCODE
+          iverilog -g2012 -DMISTER -s osd_pause_tb -o /tmp/osd-pause tests/llapi/osd_pause_tb.sv modules/jtframe/hdl/jtframe_dip.v modules/jtframe/hdl/keyboard/jtframe_pause.v modules/jtframe/hdl/jtframe_toggle.v
+          vvp /tmp/osd-pause
   build:
     needs: [source, controllers]
     runs-on: ubuntu-24.04
@@ -114,3 +118,40 @@ jobs:
             cores/1943/mister/output_files/*.map.rpt
             cores/1943/mister/*.qsf
             cores/1943/mister/*.qip
+  publish:
+    needs: [source, controllers, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: 1943-LLAPI-pilot-${{ github.run_number }}
+          path: built
+      - name: Publish validated OSD pause pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import json,os,shutil,hashlib
+          from pathlib import Path
+          p=Path('built/pilot-build')
+          report=json.loads((p/'reports/timing-acceptance.json').read_text())
+          assert report['accepted'] and all(v>=0 for v in report['worst_slack_ns'].values())
+          r=Path('release');r.mkdir()
+          shutil.copy2(p/'cores/jt1943_llapi_snac_20261029_test.rbf',r/'jt1943_llapi_snac_20261029_pause.rbf')
+          m=(p/'mra/1943-LLAPI-SNAC-Test.mra').read_text()
+          assert 'jt1943_llapi_snac_20261029' in m
+          (r/'1943-LLAPI-SNAC-Test.mra').write_text(m.replace('jt1943_llapi_snac_20261029','jt1943_llapi_snac_20261029_pause'))
+          shutil.copy2(p/'reports/timing-acceptance.json',r/'timing-acceptance.json')
+          shutil.copy2(p/'SOURCE.txt',r/'SOURCE.txt')
+          notes="## 1943 LLAPI + SNAC — experimental two-player build\n\nThis build pauses Jotego's 1943 automatically while the OSD menu is open and resumes when it closes. A manual pause remains active after closing the menu. The change is limited to this LLAPI integration. **LLAPI 2P is the default.**\n\n| USER / Serial port mode | Players |\n| --- | --- |\n| **LLAPI 2P — default** | 2 |\n| SNAC SATURN 1P | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB9 1P (Mega Drive) | 1 SNAC + optional USB / GAMEPORT P2 |\n| SNAC DB15 2P (Ultimate SNAC DB15) | 2 |\n| SNAC SNES 2P | 2, with a compatible dual-port SNAC adapter |\n\nThe Bliss-Box cable profile and cable selector are removed. No analog Saturn 3D handshake or SNES multitap support is included. A passive splitter that duplicates a single SNES data signal cannot provide independent players.\n\n### SNES two-player wiring and controls\n\nShared latch: USER0. Player 1 clock/data: USER1/USER5. Player 2 clock/data: USER3/USER6, matching the official SNES core. B shoots, A bombs, Select inserts that player's coin and Start starts the corresponding player. Down+Start+B opens the menu from either controller. In SNES mode P2 is SNAC, not USB.\n\nDB15 uses the original Jotego splitter protocol and pinout. Select and Start apply to the corresponding player; Start+C opens the menu. LLAPI retains the existing arcade convention and USB fallback.\n\n### Mega Drive controls — hardware tested\n\nBoth three-button and six-button Mega Drive controllers have been tested successfully by UltimateMiSTer. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **Keyboard: press 5 to insert a P1 coin (not F5; F5 lowers the volume).**\n\n### Validation and limitations\n\nController simulations passed, including automatic OSD pause/resume and preservation of manual pause. Compilation and all timing checks passed; exact margins are included in the attached timing-acceptance.json.\n\n**The preceding SNES 2P build was physically tested and confirmed working by UltimateMiSTer in these controller modes: LLAPI 2P, SNAC SATURN 1P, SNAC DB9 1P (Mega Drive three-button and six-button), SNAC DB15 2P (Ultimate SNAC DB15), and SNAC SNES 2P.** The earlier three-button report was resolved by inserting a coin before starting. **The new automatic OSD pause change still needs physical confirmation.**\n\n### Download and install\n\nUse the attached ZIP, or the matching RBF and MRA. Copy the RBF to `_Arcade/cores/` and the MRA to `_Arcade/`. The LLAPI Update All catalog installs the current build as `_LLAPI/_Arcade/1943-LLAPI-Test.mra`. Supply your own compatible Euro `1943.zip`; no ROM data is included. Reselect the serial protocol after upgrading from an earlier pilot.\n\nExact compiled source: SOURCE_SHA_PLACEHOLDER. Build and tests: RUN_URL_PLACEHOLDER.\n\nIndependent experimental fork of [Jotego's jtcores](https://github.com/jotego/jtcores), using the existing MiSTer-LLAPI arcade protocol. Original credits, licenses and upstream history are preserved. This is not an official Jotego release.\n"
+          notes=notes.replace('SOURCE_SHA_PLACEHOLDER',os.environ['SOURCE_SHA']).replace('RUN_URL_PLACEHOLDER',os.environ['RUN_URL'])
+          (r/'Release-notes.md').write_text(notes)
+          (r/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in sorted(r.iterdir()) if f.is_file() and f.name!='SHA256SUMS.txt'))
+          PYCODE
+          (cd release && zip -q ../1943-LLAPI-SNAC-OSD-pause.zip *)
+          gh release create v1943-llapi-snac-20261029-osd-pause --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --title '1943 LLAPI + SNAC — automatic OSD pause experimental' --notes-file release/Release-notes.md 1943-LLAPI-SNAC-OSD-pause.zip release/jt1943_llapi_snac_20261029_pause.rbf release/1943-LLAPI-SNAC-Test.mra release/SHA256SUMS.txt release/timing-acceptance.json release/SOURCE.txt
