@@ -11,7 +11,8 @@ module jtframe_llapi_arcade #(
     input [15:0] usb1, usb2,
     output [15:0] joy1, joy2,
     output [3:0] start, coin,
-    output osd_request
+    output osd_request,
+    output [1:0] autofire_hold
 );
     wire [31:0] buttons1, buttons2;
     wire [7:0] type1,type2;
@@ -66,8 +67,21 @@ module jtframe_llapi_arcade #(
             valid2_meta<=valid2; valid2_sync<=valid2_meta;
         end
     end
+`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
+    // SNES LLAPI X is button bit 2; reserved for hold-to-fire in builds that enable it.
+    assign autofire_hold={valid2_sync && buttons2_sync[2],valid1_sync && buttons1_sync[2]};
+`else
+    assign autofire_hold=0;
+`endif
+`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
+    // X is reserved for autofire; do not also invoke 1943's button-3 loop.
+    wire [31:0] mapped1=buttons1_sync & 32'hfffffffb;
+    wire [31:0] mapped2=buttons2_sync & 32'hfffffffb;
+`else
+    wire [31:0] mapped1=buttons1_sync,mapped2=buttons2_sync;
+`endif
     jtframe_llapi_arcade_map #(.BUTTONS(BUTTONS)) u_map(
-        .buttons1(buttons1_sync),.buttons2(buttons2_sync),
+        .buttons1(mapped1),.buttons2(mapped2),
         .valid1(valid1_sync),.valid2(valid2_sync),.osd_active(osd_active),
         .usb1(usb1),.usb2(usb2),.joy1(joy1),.joy2(joy2),
         .start(start),.coin(coin),.osd_request(osd_request));
@@ -104,3 +118,4 @@ module jtframe_llapi_arcade_map #(parameter BUTTONS=3)(
     assign start=inhibit ? 4'd0 : {2'b0,p1[6]|p2[6],p1[5]|p2[5]};
     assign coin=inhibit ? 4'd0 : {2'b0,p2[4],p1[4]};
 endmodule
+

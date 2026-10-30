@@ -36,3 +36,5 @@ JT1943_MCU_HLE
 # Experimental arcade LLAPI pilot; USER port is reserved for LLAPI.
 JTFRAME_LLAPI
 JTFRAME_NO_DB15
+
+JTFRAME_LLAPI_HOLD_AUTOFIRE
