@@ -1,10 +1,10 @@
-# MiSTer-LLAPI — 1943 experimental controller support
+# MiSTer-LLAPI — 1943 and 1944 controller support
 
-This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Battle of Midway (Euro)** on MiSTer. The integration is experimental and currently limited to this core; it does not add LLAPI to every game in jtcores.
+This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Battle of Midway (Euro)** on MiSTer. The 1943 integration is described below; a separate 1944 CPS2 integration with hold-to-autofire is also available. These integrations do not add LLAPI to every game in jtcores.
 
 [Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261029-osd-pause) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
 
-The current build automatically pauses while the OSD menu is open and resumes when it closes. A manual pause remains active after closing OSD. The new OSD-pause change has passed regression tests and timing checks; physical confirmation of this change is pending.
+The current build automatically pauses while the OSD menu is open and resumes when it closes. A manual pause remains active after closing OSD. The OSD-pause change passed regression tests and timing checks and was physically confirmed working by UltimateMiSTer. The 1943 credits page is intentionally static, as in upstream Jotego.
 
 | USER / Serial port mode | Players |
 | --- | --- |
@@ -27,6 +27,16 @@ Install through Update All with LLAPI enabled, or download the RBF and MRA toget
 Both three-button and six-button Mega Drive controllers have been tested successfully by UltimateMiSTer. On a six-button controller, **Mode inserts a coin**. On either controller, **Down+Start inserts a coin**; release the combination, then press **Start alone to start P1**. Start was confirmed working on both controller types. **Keyboard: press 5 to insert a P1 coin (not F5; F5 lowers the volume).**
 
 This is an independent experimental MiSTer-LLAPI fork, not an official Jotego release. Original authorship, history, source notices and licenses are preserved below and throughout the repository. Please support Jotego's FPGA research.
+
+## 1944: The Loop Master — experimental hold-to-autofire
+
+[Download 1944 with autofire](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1944-llapi-snac-20261029-autofire-experimental) · [1944 source and controls](https://github.com/MiSTer-LLAPI/jtcores/blob/llapi-1944-test/tests/llapi/1944-README.md)
+
+Available through **Update All with LLAPI enabled**, using `_LLAPI/_Arcade/1944-LLAPI-Test.mra`. Install the matching MRA and RBF together when downloading manually. Requires at least 64 MB SDRAM; no game ROMs or keys are included.
+
+**Hold X on a SNES controller via LLAPI or SNAC SNES to autofire the shot button; release X to stop.** This is hold-to-fire, not a toggle. Manual firing remains available and the menu inhibits firing. This change is enabled only for the dedicated 1944 build; it is not included in the 1943 release.
+
+The 1944 build offers the same LLAPI/Saturn/DB9/DB15/SNES serial modes listed above. **UltimateMiSTer confirmed LLAPI P1 and SNAC SNES 2P on the preceding build. LLAPI port 2 has a reported issue and remains under investigation; this autofire revision does not fix its routing.** The autofire revision passed automated tests, FPGA compilation and timing checks, but physical validation of the new autofire feature is pending. Do not treat all 1944 controller modes as hardware validated.
 
 ---
 
@@ -128,3 +138,4 @@ Thank you all!
 |oooooooooooooo+o+oo++++o+ooooooooooooooooooooooo+o+++o++o+oooooooooooooooooooooo|
 +--------------------------------------------------------------------------------+
 ```
+
