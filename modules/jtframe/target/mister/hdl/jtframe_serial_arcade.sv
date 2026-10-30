@@ -84,7 +84,7 @@ module jtframe_serial_arcade #(parameter BUTTONS=3)(
         vb_meta<=vblank;vb_sync<=vb_meta;
     end
     wire [1:0] held=stable && !inhibit ?
-        (active_sys==0 ? llapi_af : active_sys==4 ? snac_af_sys : 2'b0) : 2'b0;
+        (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2) ? snac_af_sys : 2'b0) : 2'b0;
     wire fire1,fire2;
     hold_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,fire1);
     hold_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,fire2);
@@ -172,6 +172,9 @@ module jtframe_snac_arcade #(
                         6: begin md_extra<=md_in[3:0]; user_out[4]<=0; end
                         7: begin
                             user_out[4]<=1;
+                            // MD6 X is separate from ABC/Mode/Start and only
+                            // valid after the extension handshake; MD3 has no X.
+                            autofire_hold<={1'b0,md_valid && md_six && !md_extra[2]};
                             if(md_valid) begin
                                 pad[3:0]<=~{md_high[0],md_high[1],md_high[2],md_high[3]};
                                 pad[6:4]<=~{md_high[5],md_as[0],md_high[4]}; // C,A,B => buttons 3,2,1

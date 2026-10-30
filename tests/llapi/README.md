@@ -1,13 +1,13 @@
-# 1943 LLAPI + SNAC — hold autofire experimental
+# 1943 LLAPI + SNAC — free-button autofire experimental
 
-Hold X on a SNES controller via LLAPI or SNAC SNES for autofire; release X to stop. This is not a toggle. The pulse timing is the same as the hardware-tested 1944 autofire implementation (three frames per half-period, about 10 shots per second). X is reserved for autofire and does not activate the 1943 third-button loop shortcut through LLAPI. Manual firing, bomb and menu shortcuts remain available. Other controller modes keep their previous mappings.
+Hold the autofire button to shoot repeatedly; release it to stop. This is not a toggle. Manual fire, bomb, the 1943 third-button loop, coin, Start and menu shortcuts retain their previous mappings.
 
-LLAPI 2P is the default. Serial modes: LLAPI 2P; SNAC SATURN 1P; SNAC DB9 1P (Mega Drive 3/6-button); SNAC DB15 2P (Ultimate SNAC DB15); SNAC SNES 2P with a compatible dual-port adapter. Saturn is digital only; no Bliss-Box cable profile, analog 3D handshake or multitap. Keep DE10-Nano SW1 OFF.
+LLAPI uses previously unused packet bit 3: SNES X and Mega Drive six-button Y in the current MiSTer-LLAPI SNES/Genesis reference cores. Custom adapter mappings can change the physical label. The existing 1944 bit-2 autofire alias is retained; 1943 bit 2 retains its original third-button loop. SNAC SNES uses X; SNAC Mega Drive six-button uses X only after a valid six-button handshake. Three-button Mega Drive controls are unchanged and do not gain autofire.
 
-The game pauses while OSD is open and resumes when it closes, preserving manual pause. The original upstream 1943 credits page is static by design. All controller modes and OSD pause were physically confirmed by UltimateMiSTer in preceding 1943 builds. UltimateMiSTer physically confirmed the same hold-autofire feature on 1944. This new 1943 autofire build still requires physical validation; successful automated tests and timing checks do not establish hardware validation of this revision.
+LLAPI 2P is the default. Other serial modes: SNAC SATURN 1P (digital only), SNAC DB9 1P (Mega Drive), SNAC DB15 2P (Ultimate SNAC DB15), SNAC SNES 2P (compatible dual-port adapter required). Keep DE10-Nano SW1 OFF. No Bliss-Box cable profile, analog Saturn handshake or multitaps. OSD pause is retained. No controller routing changes are included.
 
-SNES: B shoots, A bombs, X held autofires, Select inserts that player's coin, Start starts that player, Down+Start+B opens OSD. SNES dual-port wiring: shared latch USER0; P1 clock/data USER1/USER5, P2 USER3/USER6. DB15 retains Jotego's original reader and pinout; Select/Start per player, Start+C opens OSD. Mega Drive: Mode (6-button) or Down+Start inserts a coin, release then Start alone starts P1. Keyboard 5 inserts P1 coin; F5 lowers volume.
+New free-button revisions require physical validation. UltimateMiSTer confirmed the previous 1944 autofire, LLAPI P1 and SNAC SNES 2P; the reported 1944 LLAPI port-2 issue is deferred. Previous 1943 controller modes and OSD pause were physically confirmed; its upstream credits page is intentionally static. Automated tests and Quartus timing checks do not establish hardware validation of this revision.
 
-Install the matching MRA and RBF together, in _Arcade/ and _Arcade/cores/. The LLAPI Update All entry is _LLAPI/_Arcade/1943-LLAPI-Test.mra once its catalogue update is verified. Supply your own compatible Euro 1943.zip. No ROM data is included.
+Install matching MRA and RBF together. Supply your own compatible game ROMs. No ROM data is included. Independent experimental MiSTer-LLAPI integration of Jotego's cores; original credits, licenses and source history are preserved. Please support https://patreon.com/jotego.
 
-Independent experimental MiSTer-LLAPI integration of Jotego's core. Original credits, licenses, LLAPI notices and source history are preserved. Please support https://patreon.com/jotego.
+Mapping references: https://github.com/MiSTer-LLAPI/SNES_MiSTer/blob/master/SNES.sv and https://github.com/MiSTer-LLAPI/Genesis_MiSTer/blob/master/Genesis.sv

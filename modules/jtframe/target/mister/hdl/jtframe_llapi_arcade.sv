@@ -68,20 +68,16 @@ module jtframe_llapi_arcade #(
         end
     end
 `ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
-    // SNES LLAPI X is button bit 2; reserved for hold-to-fire in builds that enable it.
-    assign autofire_hold={valid2_sync && buttons2_sync[2],valid1_sync && buttons1_sync[2]};
+    // Bit3 is unused by the existing arcade map (bits0..2 are game buttons).
+    // Current SNES reference maps it to X; Genesis six-button maps it to Y.
+    // Keep the already-tested bit2 autofire alias only in two-button cores.
+    assign autofire_hold={valid2_sync && (buttons2_sync[3] || (BUTTONS<3 && buttons2_sync[2])),
+                          valid1_sync && (buttons1_sync[3] || (BUTTONS<3 && buttons1_sync[2]))};
 `else
     assign autofire_hold=0;
 `endif
-`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
-    // X is reserved for autofire; do not also invoke 1943's button-3 loop.
-    wire [31:0] mapped1=buttons1_sync & 32'hfffffffb;
-    wire [31:0] mapped2=buttons2_sync & 32'hfffffffb;
-`else
-    wire [31:0] mapped1=buttons1_sync,mapped2=buttons2_sync;
-`endif
     jtframe_llapi_arcade_map #(.BUTTONS(BUTTONS)) u_map(
-        .buttons1(mapped1),.buttons2(mapped2),
+        .buttons1(buttons1_sync),.buttons2(buttons2_sync),
         .valid1(valid1_sync),.valid2(valid2_sync),.osd_active(osd_active),
         .usb1(usb1),.usb2(usb2),.joy1(joy1),.joy2(joy2),
         .start(start),.coin(coin),.osd_request(osd_request));

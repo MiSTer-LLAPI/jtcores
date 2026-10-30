@@ -39,7 +39,7 @@ if test "$success" != 1; then
 fi
 python3 tests/llapi/check-timing.py
 mkdir -p pilot-build/cores pilot-build/mra pilot-build/reports
-cp release/mister/jt1943.rbf pilot-build/cores/jt1943_llapi_snac_20261030_autofire.rbf
+cp release/mister/jt1943.rbf pilot-build/cores/jt1943_llapi_snac_20261030_freebuttons.rbf
 cp tests/llapi/1943-LLAPI-SNAC-Test.mra pilot-build/mra/
 cp tests/llapi/README.md pilot-build/LE-ME.md
 cp pilot-reports/* pilot-build/reports/
