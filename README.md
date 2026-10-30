@@ -2,7 +2,7 @@
 
 This fork adds selectable LLAPI and SNAC controllers to **Jotego's 1943: The Battle of Midway (Euro)** on MiSTer. The 1943 integration is described below; a separate 1944 CPS2 integration with hold-to-autofire is also available. These integrations do not add LLAPI to every game in jtcores.
 
-[Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261029-osd-pause) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
+[Download the current experimental release](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1943-llapi-snac-20261030-freebuttons-experimental) · [Integration source](https://github.com/MiSTer-LLAPI/jtcores/tree/llapi-1943-test) · [LLAPI Update All folder](https://github.com/MiSTer-LLAPI/LLAPI_folder_MiSTer)
 
 The current build automatically pauses while the OSD menu is open and resumes when it closes. A manual pause remains active after closing OSD. The OSD-pause change passed regression tests and timing checks and was physically confirmed working by UltimateMiSTer. The 1943 credits page is intentionally static, as in upstream Jotego.
 
@@ -28,15 +28,30 @@ Both three-button and six-button Mega Drive controllers have been tested success
 
 This is an independent experimental MiSTer-LLAPI fork, not an official Jotego release. Original authorship, history, source notices and licenses are preserved below and throughout the repository. Please support Jotego's FPGA research.
 
+## Hold-to-autofire — 1943 and 1944
+
+Both current experimental builds add autofire while preserving the previous shot, bomb, 1943 third-button loop, coin, Start and menu mappings. **Hold the autofire button to shoot repeatedly; release it to stop.** It is not a toggle. Manual firing remains available; OSD inhibits firing.
+
+| Controller path | Autofire button |
+| --- | --- |
+| LLAPI SNES | X (packet bit 3 in the current SNES reference core) |
+| LLAPI Mega Drive six-button | Y (packet bit 3 in the current Genesis reference core) |
+| SNAC SNES | X |
+| SNAC Mega Drive six-button | X, after a valid six-button handshake |
+
+LLAPI adapters with custom or alternate mappings may use a different physical label. Packet bit 3 was unused by the preceding arcade mapping. The 1943 bit-2 third-button loop remains unchanged; the already tested 1944 bit-2 autofire alias is retained. Mega Drive three-button controls remain unchanged and do not gain autofire. Other SNAC modes retain their prior controls without a new autofire assignment.
+
+Both revisions passed controller regression tests, FPGA compilation and timing checks. **Physical validation of these new free-button revisions is pending.** UltimateMiSTer confirmed the earlier 1944 autofire; that confirmation does not establish hardware validation of the added mappings. Previous 1943 controller modes and OSD pause were physically confirmed as described above. The reported 1944 LLAPI port-2 issue is deferred; routing is unchanged in these revisions.
+
 ## 1944: The Loop Master — experimental hold-to-autofire
 
-[Download 1944 with autofire](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1944-llapi-snac-20261029-autofire-experimental) · [1944 source and controls](https://github.com/MiSTer-LLAPI/jtcores/blob/llapi-1944-test/tests/llapi/1944-README.md)
+[Download 1944 with autofire](https://github.com/MiSTer-LLAPI/jtcores/releases/tag/v1944-llapi-snac-20261030-freebuttons-experimental) · [1944 source and controls](https://github.com/MiSTer-LLAPI/jtcores/blob/llapi-1944-test/tests/llapi/1944-README.md)
 
 Available through **Update All with LLAPI enabled**, using `_LLAPI/_Arcade/1944-LLAPI-Test.mra`. Install the matching MRA and RBF together when downloading manually. Requires at least 64 MB SDRAM; no game ROMs or keys are included.
 
-**Hold X on a SNES controller via LLAPI or SNAC SNES to autofire the shot button; release X to stop.** This is hold-to-fire, not a toggle. Manual firing remains available and the menu inhibits firing. This change is enabled only for the dedicated 1944 build; it is not included in the 1943 release.
+See the shared autofire table above for LLAPI and SNAC button assignments. Both 1943 and 1944 now include hold-to-autofire on available buttons.
 
-The 1944 build offers the same LLAPI/Saturn/DB9/DB15/SNES serial modes listed above. **UltimateMiSTer confirmed LLAPI P1 and SNAC SNES 2P on the preceding build. LLAPI port 2 has a reported issue and remains under investigation; this autofire revision does not fix its routing.** The autofire revision passed automated tests, FPGA compilation and timing checks, but physical validation of the new autofire feature is pending. Do not treat all 1944 controller modes as hardware validated.
+The 1944 build offers the same LLAPI/Saturn/DB9/DB15/SNES serial modes listed above. **UltimateMiSTer confirmed LLAPI P1 and SNAC SNES 2P on the preceding build. LLAPI port 2 has a reported issue and is deferred; this revision does not change its routing.** The earlier autofire was physically confirmed by UltimateMiSTer. This new free-button revision passed automated tests, FPGA compilation and timing checks; physical validation of its added mappings is pending. Do not treat all 1944 controller modes as hardware validated.
 
 ---
 
@@ -138,4 +153,5 @@ Thank you all!
 |oooooooooooooo+o+oo++++o+ooooooooooooooooooooooo+o+++o++o+oooooooooooooooooooooo|
 +--------------------------------------------------------------------------------+
 ```
+
 
