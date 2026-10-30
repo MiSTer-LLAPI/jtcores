@@ -68,8 +68,11 @@ module jtframe_llapi_arcade #(
         end
     end
 `ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
-    // SNES LLAPI X is button bit 2; keep this optional for the 1944 build.
-    assign autofire_hold={valid2_sync && buttons2_sync[2],valid1_sync && buttons1_sync[2]};
+    // Bit3 is unused by the existing arcade map (bits0..2 are game buttons).
+    // Current SNES reference maps it to X; Genesis six-button maps it to Y.
+    // Keep the already-tested bit2 autofire alias only in two-button cores.
+    assign autofire_hold={valid2_sync && (buttons2_sync[3] || (BUTTONS<3 && buttons2_sync[2])),
+                          valid1_sync && (buttons1_sync[3] || (BUTTONS<3 && buttons1_sync[2]))};
 `else
     assign autofire_hold=0;
 `endif
