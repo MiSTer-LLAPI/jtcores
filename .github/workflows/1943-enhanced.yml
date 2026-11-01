@@ -29,7 +29,7 @@
           "with": {
             "ref": "b222692d4c0c9a26a6cb3c99c6820b1ed4a5d565",
             "persist-credentials": false,
-            "sparse-checkout": "cores/1944\ncores/cps1\ncores/cps15\ncores/cps2\nmodules/jtframe\nmodules/jteeprom\nmodules/fx68k\nmodules/jtdsp16\nmodules/jt12\ntests/llapi\ncores/1943\ncores/trojan\ncores/gng"
+            "sparse-checkout": "cores/1944\ncores/cps1\ncores/cps15\ncores/cps2\nmodules/jtframe\nmodules/jteeprom\nmodules/fx68k\nmodules/jtdsp16\nmodules/jt12\ntests/llapi\ncores/1943\ncores/trojan\ncores/gng\nmodules/jt8051"
           }
         },
         {
