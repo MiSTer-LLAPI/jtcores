@@ -27,6 +27,7 @@ jobs:
           docker run --rm -v "$PWD/darius:/src" -w /src --entrypoint bash raetro/quartus:17.0 -ec '
             quartus_sh --version | tee quartus-version.txt
             grep -E "17\.0\..*Lite Edition" quartus-version.txt
+            echo "set_global_assignment -name SEED 2" >> Darius.qsf
             quartus_sh --flow compile Darius'
       - name: Save compiler reports
         if: always()
@@ -39,6 +40,13 @@ jobs:
             darius/output_files/*.rpt
       - name: Package private test build
         run: |
+          python3 - <<'PYTIMING'
+          from pathlib import Path
+          import re
+          report = Path('darius/output_files/Darius.sta.summary').read_text()
+          slacks = [float(x) for x in re.findall(r'^Slack\s*:\s*([-\d.]+)', report, re.M)]
+          assert slacks and min(slacks) >= 0, slacks
+          PYTIMING
           mkdir -p install/_Arcade/cores
           cp darius/output_files/Darius.rbf install/_Arcade/cores/Darius_llapi10.rbf
           sed 's@<name>Darius (World)</name>@<name>Darius</name>@;s@<rbf>Darius</rbf>@<rbf>Darius_llapi10</rbf>@' 'darius/releases/Darius (World).mra' > install/_Arcade/Darius.mra
