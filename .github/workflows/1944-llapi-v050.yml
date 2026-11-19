@@ -41,7 +41,7 @@
         },
         {
           "name": "Restore pinned shared Enhanced menu sources",
-          "run": "curl -fsSL --retry 3 https://raw.githubusercontent.com/$GITHUB_REPOSITORY/a5d760a27c09aea53071788038d8a66512365be8/.github/workflows/contra-poll-diagnostic.yml -o /tmp/shared.json\npython3 - <<'PYCODE'\nimport json,subprocess\nfor s in json.load(open('/tmp/shared.json'))['jobs']['candidate']['steps'][2:6]:\n subprocess.run(['bash','-e','-c',s['run'].replace('$GITHUB_SHA','a5d760a27c09aea53071788038d8a66512365be8')],check=True)\nPYCODE"
+          "run": "curl -fsSL --retry 3 https://raw.githubusercontent.com/$GITHUB_REPOSITORY/a5d760a27c09aea53071788038d8a66512365be8/.github/workflows/contra-poll-diagnostic.yml -o /tmp/shared.json\npython3 - <<'PYCODE'\nimport json,subprocess\nfor s in json.load(open('/tmp/shared.json'))['jobs']['candidate']['steps'][2:6]:\n subprocess.run(['bash','-e'],input=s['run'].replace('$GITHUB_SHA','a5d760a27c09aea53071788038d8a66512365be8'),text=True,check=True)\nPYCODE"
         },
         {
           "name": "Load 1944 integration 1",
@@ -65,7 +65,7 @@
         },
         {
           "name": "Compile with unchanged clocks and strict timing acceptance",
-          "run": "docker run --rm --network host --entrypoint /bin/bash -v \"$GITHUB_WORKSPACE:/jtcores\" -w /jtcores \"$BUILD_IMAGE\" /jtcores/tests/llapi/build-1944.sh"
+          "run": "docker run --rm --network host --entrypoint /bin/bash -v \"$GITHUB_WORKSPACE:/jtcores\" -w /jtcores \"$BUILD_IMAGE\" -ec 'quartus_sh --version | tee pilot-reports/quartus-version.txt; grep -Eq \"20\\.1\\.1.*Build 720.*Lite Edition\" pilot-reports/quartus-version.txt; bash /jtcores/tests/llapi/build-1944.sh'"
         },
         {
           "name": "Package isolated 1944 test launcher and core",
