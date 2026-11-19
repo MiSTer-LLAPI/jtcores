@@ -1,0 +1,49 @@
+name: Darius Enhanced 1.0
+on:
+  push:
+    branches: [test-darius-enhanced-v1]
+    paths: ['.github/workflows/darius-enhanced.yml', 'enhanced/darius/**']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          sparse-checkout: enhanced/darius
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: rmonic79/Arcade-Darius_MiSTer
+          ref: 3e325eeed1a37ce266df6e8c47921fb078b9a032
+          path: darius
+          persist-credentials: false
+      - name: Apply Enhanced controls
+        run: git -C darius apply ../enhanced/darius/integration.patch
+      - name: Compile using the upstream Quartus 17.0 Lite toolchain
+        run: |
+          docker run --rm -v "$PWD/darius:/src" -w /src --entrypoint bash raetro/quartus:17.0 -ec '
+            quartus_sh --version | tee quartus-version.txt
+            grep -E "17\.0\..*Lite Edition" quartus-version.txt
+            quartus_sh --flow compile Darius'
+      - name: Save compiler reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Darius-build-reports
+          path: |
+            darius/quartus-version.txt
+            darius/output_files/*.summary
+            darius/output_files/*.rpt
+      - name: Package private test build
+        run: |
+          mkdir -p install/_Arcade/cores
+          cp darius/output_files/Darius.rbf install/_Arcade/cores/Darius_llapi10.rbf
+          sed 's@<name>Darius (World)</name>@<name>Darius</name>@;s@<rbf>Darius</rbf>@<rbf>Darius_llapi10</rbf>@' 'darius/releases/Darius (World).mra' > install/_Arcade/Darius.mra
+          (cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Darius-Enhanced-1.0
+          path: install/
