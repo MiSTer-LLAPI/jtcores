@@ -16,7 +16,7 @@ index 6acfcd2..63c9c1f 100644
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_protocol.sv
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_serial_arcade.sv
 diff --git a/Template.sv b/Template.sv
-index 7357c73..4849648 100644
+index 7357c73..e91149f 100644
 --- a/Template.sv
 +++ b/Template.sv
 @@ -139,7 +139,7 @@ module emu
@@ -60,7 +60,7 @@ index 7357c73..4849648 100644
 +	"H0P3O[90],Immediate Repoll,On,Off;",
 +	"P3O[91],P1 Autofire,Off,On;",
 +	"P3O[92],P2 Autofire,Off,On;",
-+	"P3O[93],Controller Loss Pause,Off,On;",
++	"P3T[93],Resume after disconnect;",
 +	"H0P3-,P1: ", 8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09, 8'h0a, 8'h0b, 8'h0c, 8'h0d, 8'h0e, 8'h0f, ";",
 +	"H0P3-,P2: ", 8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18, 8'h19, 8'h1a, 8'h1b, 8'h1c, 8'h1d, 8'h1e, 8'h1f, ";",
  	"P1,Video;",
