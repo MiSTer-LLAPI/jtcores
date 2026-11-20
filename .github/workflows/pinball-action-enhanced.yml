@@ -1,0 +1,57 @@
+name: Pinball Action Enhanced 1.0
+on:
+  push:
+    branches: [test-pinball-action-enhanced-v1]
+    paths: ['.github/workflows/pinball-action-enhanced.yml', 'enhanced/pinball/**']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          sparse-checkout: enhanced/pinball
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: MiSTer-devel/Arcade-PinballAction
+          ref: 2b8392362e7aca6acbab5a95aa19c3095d5283ec
+          path: pinball
+          persist-credentials: false
+      - name: Apply Enhanced controls
+        run: git -C pinball apply ../enhanced/pinball/integration.patch
+      - name: Compile
+        run: |
+          docker run --rm -v "$PWD/pinball:/src" -w /src --entrypoint bash raetro/quartus:17.0 -ec '
+            quartus_sh --version | tee quartus-version.txt
+            grep -F "17.0.2 Build 602" quartus-version.txt
+            grep -F "Lite Edition" quartus-version.txt
+            quartus_sh --flow compile PinballAction'
+      - name: Save compiler reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PinballAction-build-reports
+          path: |
+            pinball/quartus-version.txt
+            pinball/output_files/*.summary
+            pinball/output_files/*.rpt
+      - name: Package private test build
+        run: |
+          python3 - <<'PYTIMING'
+          from pathlib import Path
+          import re
+          report = Path('pinball/output_files/PinballAction.sta.summary').read_text()
+          slacks = [float(x) for x in re.findall(r'^Slack\s*:\s*([-\d.]+)', report, re.M)]
+          assert slacks and min(slacks) >= 0, slacks
+          PYTIMING
+          mkdir -p install/_Arcade/cores
+          cp pinball/output_files/PinballAction.rbf install/_Arcade/cores/PinballAction_llapi10.rbf
+          sed 's@<rbf>PinballAction</rbf>@<rbf>PinballAction_llapi10</rbf>@' 'pinball/releases/Pinball Action.mra' > 'install/_Arcade/Pinball Action.mra'
+          (cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PinballAction-Enhanced-1.0
+          path: install/
