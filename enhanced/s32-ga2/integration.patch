@@ -1,7 +1,25 @@
 diff --git a/S32.qsf b/S32.qsf
-index d3ceece..a69835b 100644
+index d3ceece..68b8743 100644
 --- a/S32.qsf
 +++ b/S32.qsf
+@@ -42,7 +42,7 @@ set_global_assignment -name ALLOW_POWER_UP_DONT_CARE ON
+ set_global_assignment -name QII_AUTO_PACKED_REGISTERS NORMAL
+ set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
+ set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+-set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
++set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF
+ # Register retiming stays OFF: it renames the registers it moves, which
+ # silently unhooks the register-name-scoped multicycle exceptions in S32.sdc.
+ # Register duplication is safe (the copies keep their base names).
+@@ -62,7 +62,7 @@ set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
+ set_global_assignment -name ECO_OPTIMIZE_TIMING ON
+ set_global_assignment -name PERIPHERY_TO_CORE_PLACEMENT_AND_ROUTING_OPTIMIZATION ON
+ set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING ON
+-set_global_assignment -name ALM_REGISTER_PACKING_EFFORT MEDIUM
++set_global_assignment -name ALM_REGISTER_PACKING_EFFORT HIGH
+ # The release bitstream was fitted with seed 7. The worst path on this design
+ # is usually in the framework's HDMI scaler (ascal), though the core clock can
+ # also miss; if a source change leaves either slightly negative, try another
 @@ -138,3 +138,13 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_logsin:u_logsin"
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym1|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
