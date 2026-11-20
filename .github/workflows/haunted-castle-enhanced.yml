@@ -35,7 +35,7 @@
         },
         {
           "name": "Fetch exact baseline submodules",
-          "run": "git submodule update --init --recursive --depth 1 $(git ls-files --stage modules | awk '$1 == 160000 && $4 ~ /\\/(fx68k|jt51|jt12|jt6295|jt5205|jt7759|jt8255|jt8051|jtdsp16)$/ {print $4}')"
+          "run": "git submodule update --init --recursive --depth 1 $(git ls-files --stage modules | awk '$1 == 160000 && $4 ~ /\\/(fx68k|jt51|jt12|jt6295|jt5205|jt7759|jt8255|jt8051|jtdsp16|jtopl|jtkcpu|jt007232)$/ {print $4}')"
         },
         {
           "name": "Restore pinned shared Enhanced menu sources",
