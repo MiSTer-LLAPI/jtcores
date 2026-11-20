@@ -1,0 +1,66 @@
+name: Golden Axe Death Adder Enhanced 1.0
+on:
+  push:
+    branches: [test-s32-ga2-enhanced-v1]
+    paths: ['.github/workflows/s32-ga2-enhanced.yml', 'enhanced/s32-ga2/**']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          sparse-checkout: enhanced/s32-ga2
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: MiSTer-devel/Arcade-SegaSystem32_MiSTer
+          ref: fb0c03a75ffd274939548c591474c5468380672f
+          path: darius
+          persist-credentials: false
+      - name: Apply Enhanced controls
+        run: git -C darius apply ../enhanced/s32-ga2/integration.patch
+      - name: Compile using the upstream Quartus 17.0 Lite toolchain
+        run: |
+          docker run --rm -v "$PWD/darius:/src" -w /src --entrypoint bash raetro/quartus:17.0 -ec '
+            quartus_sh --version | tee quartus-version.txt
+            grep -E "17\.0\..*Lite Edition" quartus-version.txt
+            grep -F "17.0.2 Build 602" quartus-version.txt
+            quartus_sh --flow compile S32'
+      - name: Save compiler reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: S32-GA2-build-reports
+          path: |
+            darius/quartus-version.txt
+            darius/output_files/*.summary
+            darius/output_files/*.rpt
+      - name: Package private test build
+        run: |
+          python3 - <<'PYTIMING'
+          from pathlib import Path
+          import re
+          report = Path('darius/output_files/S32.sta.summary').read_text()
+          slacks = [float(x) for x in re.findall(r'^Slack\s*:\s*([-\d.]+)', report, re.M)]
+          assert slacks and min(slacks) >= 0, slacks
+          PYTIMING
+          mkdir -p install/_Arcade/cores
+          cp darius/output_files/S32.rbf install/_Arcade/cores/S32_ga2_llapi10.rbf
+          python3 - <<'PYMRA'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          p=Path('darius/releases/Golden Axe - The Revenge of Death Adder.mra')
+          data=p.read_bytes()
+          root=ET.fromstring(data)
+          assert root.findtext('rbf')=='S32' and root.findtext('setname')=='ga2'
+          assert root.find('buttons').get('names').startswith('Attack,Jump,Magic,Start,Coin')
+          Path('install/_Arcade',p.name).write_bytes(data.replace(b'<rbf>S32</rbf>',b'<rbf>S32_ga2_llapi10</rbf>'))
+          PYMRA
+          (cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: S32-GA2-Enhanced-1.0
+          path: install/

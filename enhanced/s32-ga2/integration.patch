@@ -1,0 +1,1962 @@
+diff --git a/S32.qsf b/S32.qsf
+index d3ceece..a69835b 100644
+--- a/S32.qsf
++++ b/S32.qsf
+@@ -138,3 +138,13 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
+ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_logsin:u_logsin"
+ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym1|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
+ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
++
++set_global_assignment -name VERILOG_MACRO "JTFRAME_ENHANCED_CONTROLS=1"
++set_global_assignment -name VERILOG_MACRO "JTFRAME_LLAPI_HOLD_AUTOFIRE=1"
++set_global_assignment -name VERILOG_MACRO "JTFRAME_LLAPI_AUTOFIRE_OPTIONS=1"
++set_global_assignment -name VERILOG_MACRO "JTFRAME_SNAC_PCE_NES=1"
++set_global_assignment -name SYSTEMVERILOG_FILE enhanced/controller_text.sv
++set_global_assignment -name VERILOG_FILE enhanced/joydb15.v
++set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_arcade.sv
++set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_protocol.sv
++set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_serial_arcade.sv
+diff --git a/S32.sv b/S32.sv
+index 0ca7c3d..8727ffd 100644
+--- a/S32.sv
++++ b/S32.sv
+@@ -27,7 +27,7 @@ module emu
+ ///////// Default values for ports not used in this core /////////
+ 
+ assign ADC_BUS  = 'Z;
+-assign USER_OUT = '1;
++
+ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
+ // DDRAM: the fast ROM loader (s32_ddrload) owns it while the ROM image is
+@@ -57,7 +57,8 @@ assign AUDIO_MIX = 0;
+ assign LED_DISK  = 0;
+ assign LED_POWER = 0;
+ assign LED_USER  = ioctl_download;
+-assign BUTTONS = 0;
++wire serial_menu;
++assign BUTTONS = {1'b0,serial_menu};
+ 
+ //////////////////////////////////////////////////////////////////
+ 
+@@ -95,6 +96,17 @@ localparam CONF_STR = {
+ 	"O[10],Service,Off,On;",
+ 	"H2O[55:54],Stick aim,Absolute,Relative slow,Relative medium,Relative fast;",
+ 	"-;",
++	"-,Enhanced Core: 1.0;",
++	"O[89:87],Serial Port,LLAPI 2P,SNAC Saturn,SNAC Mega Drive,DB15,SNAC SNES,SNAC PCE,SNAC NES,USB;",
++	"P3,Controller Guide;",
++	"H0P3-,Serial Connection: LLAPI 2P;",
++	"H0P3-,TYPE: AUTO CONTROLLER ID;",
++	"H0P3-,LLAPI Driver: 0.5.0;",
++	"H0P3O[90],Immediate Repoll,On,Off;",
++	"P3O[91],P1 Autofire,Off,On;",
++	"P3O[92],P2 Autofire,Off,On;",
++	"H0P3-,P1: ", 8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09, 8'h0a, 8'h0b, 8'h0c, 8'h0d, 8'h0e, 8'h0f, ";",
++	"H0P3-,P2: ", 8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18, 8'h19, 8'h1a, 8'h1b, 8'h1c, 8'h1d, 8'h1e, 8'h1f, ";",
+ 	"T[0],Reset;",
+ 	"J1,Attack,Jump,Magic,Start,Coin,Service,Test,Button 4,Button 5,Button 6;",
+ 	"jn,A,B,X,Start,R,L,Select;",
+@@ -128,6 +140,8 @@ wire        ioctl_wait;
+ wire        ioctl_upload;
+ wire  [7:0] ioctl_din;
+ 
++wire [31:0] usb0, usb1;
++wire [19:0] controller_info;
+ hps_io #(.CONF_STR(CONF_STR)) hps_io
+ (
+ 	.clk_sys(clk_sys),
+@@ -139,7 +153,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
+ 
+ 	.buttons(buttons),
+ 	.status(status),
+-	.status_menumask({13'd0, ~gun_cab, ~crt_enable, 1'b0}), // H1 CRT Adjust amounts, H2 gun games' Stick aim
++	.enhanced_info(controller_info),
++	.status_menumask({13'd0, ~gun_cab, ~crt_enable, |status[89:87]}), // H1 CRT Adjust amounts, H2 gun games' Stick aim
+ 
+ 	.ioctl_download(ioctl_download),
+ 	.ioctl_index(ioctl_index),
+@@ -153,8 +168,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
+ 	.ioctl_din(ioctl_din),
+ 	.ioctl_rd(),
+ 
+-	.joystick_0(joystick_0),
+-	.joystick_1(joystick_1),
++	.joystick_0(usb0),
++	.joystick_1(usb1),
+ 	.joystick_2(joystick_2),
+ 	.joystick_3(joystick_3),
+ 	.joystick_l_analog_0(stick_0),
+@@ -1075,4 +1090,21 @@ video_freak video_freak
+ assign AUDIO_L = audio_l;
+ assign AUDIO_R = audio_r;
+ 
++// Serial controls use the original System 32 pad layout for both players.
++wire [15:0] direct0, direct1;
++wire [3:0] serial_start, serial_coin;
++jtframe_serial_arcade #(.BUTTONS(3)) controllers(
++    .clk_50(CLK_50M), .clk_sys(clk_sys), .rst(reset_req), .vblank(vblank),
++    .osd_active(OSD_STATUS), .repoll_off(status[90]), .mode(status[89:87]),
++    .user_in(USER_IN), .user_out(USER_OUT), .usb1(usb0[15:0]), .usb2(usb1[15:0]),
++    .joy1(direct0), .joy2(direct1), .start(serial_start), .coin(serial_coin),
++    .autofire_enable(status[91]), .autofire_enable2(status[92]),
++    .autofire_toggle(1'b0), .autofire_toggle2(1'b0),
++    .autofire_rate1(2'd0), .autofire_rate2(2'd0),
++    .loss_resume(1'b0), .loss_paused(), .loss_players(), .loss_countdown(),
++    .info_clk(clk_sys), .controller_info(controller_info), .link_diagnostics(),
++    .last_fault_reason(), .db15_drive(), .osd_request(serial_menu)
++);
++assign joystick_0 = {usb0[31:16],direct0[15:9],direct0[8]|serial_coin[0],direct0[7]|serial_start[0],direct0[6:0]};
++assign joystick_1 = {usb1[31:16],direct1[15:9],direct1[8]|serial_coin[1],direct1[7]|serial_start[1],direct1[6:0]};
+ endmodule
+diff --git a/enhanced/controller_text.sv b/enhanced/controller_text.sv
+new file mode 100644
+index 0000000..c6d5e3d
+--- /dev/null
++++ b/enhanced/controller_text.sv
+@@ -0,0 +1,171 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++module controller_info_text(
++ input [9:0] port_info,
++ input [3:0] index,
++ output reg [7:0] character
++);
++reg [119:0] line;
++reg [119:0] name;
++always @* begin
++ case(port_info[7:0])
++  8'd1:name="COLECO         ";
++  8'd2:name="GX4000         ";
++  8'd3:name="SATURN         ";
++  8'd4:name="ATARI7800      ";
++  8'd5:name="VECTREX        ";
++  8'd6:name="ATARI5200      ";
++  8'd7:name="HPD            ";
++  8'd8:name="SATURN 3D      ";
++  8'd9:name="GAMECUBE       ";
++  8'd10:name="ATMARK         ";
++  8'd11:name="JAGUAR         ";
++  8'd13:name="NUNCHUK        ";
++  8'd14:name="INTELLIV       ";
++  8'd15:name="DREAMCAST ASCII";
++  8'd16:name="DREAMCAST      ";
++  8'd17:name="NES            ";
++  8'd18:name="GAMECUBE WHEEL ";
++  8'd19:name="N64            ";
++  8'd20:name="MEGA DRIVE 3BTN";
++  8'd21:name="MEGA DRIVE 6BTN";
++  8'd22:name="SMS            ";
++  8'd23:name="PC ENGINE      ";
++  8'd24:name="CD32           ";
++  8'd25:name="3DO            ";
++  8'd26:name="PC-FX          ";
++  8'd27:name="SNES           ";
++  8'd28:name="ZAPPER         ";
++  8'd29:name="VIRTUALBOY     ";
++  8'd30:name="NES ARK        ";
++  8'd31:name="WIICLASSIC     ";
++  8'd32:name="MOTIONPLUS     ";
++  8'd33:name="CD-I           ";
++  8'd34:name="SAC            ";
++  8'd35:name="DC TWIN        ";
++  8'd36:name="POWERPAD       ";
++  8'd37:name="3DO ANALOG     ";
++  8'd38:name="EXTERMINATOR   ";
++  8'd39:name="SIDEWINDER     ";
++  8'd40:name="HAMMERHEAD     ";
++  8'd41:name="ATARI PADDLES  ";
++  8'd42:name="BALLY ASTROCADE";
++  8'd43:name="ATARI KEYPAD   ";
++  8'd45:name="SPEEK          ";
++  8'd46:name="PC PAD         ";
++  8'd47:name="SNES NTT       ";
++  8'd48:name="COLECO FLASHBK ";
++  8'd49:name="NEO GEO        ";
++  8'd50:name="ATARI 5200 TB  ";
++  8'd51:name="NEGCON         ";
++  8'd52:name="FAMICOM        ";
++  8'd53:name="FC ARKANOID    ";
++  8'd54:name="PCE 6-BTN      ";
++  8'd56:name="ARCADE         ";
++  8'd58:name="SATURNGUN      ";
++  8'd59:name="SMS GUN        ";
++  8'd60:name="DC GUN         ";
++  8'd61:name="GEMINI         ";
++  8'd63:name="FC POWER       ";
++  8'd64:name="ATARI TRACKBALL";
++  8'd65:name="PSX DIGITAL    ";
++  8'd67:name="WIIGUITAR      ";
++  8'd68:name="DJ HERO        ";
++  8'd69:name="WIITABLET      ";
++  8'd71:name="FC NTT         ";
++  8'd72:name="FAIRCHILD      ";
++  8'd74:name="DC MARACAS     ";
++  8'd115:name="PSX DUALSHOCK  ";
++  8'd119:name="PSX DS GS      ";
++  8'd121:name="PSX DUALSHOCK 2";
++  8'd127:name="JOGCON         ";
++  default:name="UNKNOWN        ";
++ endcase
++ case(port_info[9:8])
++  2'b00:line="NOT DETECTED   ";
++  2'b01:line=name;
++  2'b10:line={name[119:24],"(!)"};
++  default:line="UNKNOWN        ";
++ endcase
++ character=8'h20;
++ if(index<15) character=line[119-index*8 -:8];
++end
++endmodule
++
++// Reserved non-printing template bytes are replaced before Main sees them.
++module selected_interface_guide(input [2:0] mode,input [6:0] index,output [7:0] character);
++reg [255:0] line_text;
++always @* case(mode)
++3'd0: line_text="LLAPI 2P                        ";
++3'd1: line_text="SATURN - 1 PLAYER               ";
++3'd2: line_text="DB9 - 1 PLAYER                  ";
++3'd3: line_text="DB15 - 2 PLAYERS                ";
++3'd4: line_text="SNES - 2 PLAYERS                ";
++3'd5: line_text="PCE - 1 PLAYER                  ";
++3'd6: line_text="NES - 2 PLAYERS                 ";
++3'd7: line_text="NOT SELECTED                    ";
++endcase
++assign character=index<32 ? line_text[255-index*8 -:8] : 8'd32;
++endmodule
++
++
++// Logical LLAPI controls, with the verified Saturn override per port.
++module controller_shortcut_text(input [19:0] info,input [6:0] index,input [2:0] mode,input [1:0] af,output [7:0] character);
++reg [191:0] line_text;
++reg [4:0] column;
++reg [9:0] port_info;
++reg p2;
++always @* begin
++ column=0;line_text="                        ";p2=0;port_info=info[9:0];
++ if(index<56) begin
++ column=index-32;
++ case(mode)
++ 0:line_text="MENU: LEFT+START+FIRE   ";
++ 1,4:line_text="MENU: LEFT+START+B      ";
++ 3:line_text="MENU: START+C           ";
++ default:line_text="MENU: LEFT+START+FIRE   ";
++ endcase
++ end else if(index<104) begin
++ p2=index>=80;column=index-(p2 ? 80:56);port_info=p2 ? info[19:10] : info[9:0];
++ if(mode==0)begin
++ if(port_info[9:8]!=1)line_text=p2 ? "P2: NOT CONNECTED       " : "P1: NOT CONNECTED       ";
++ else if(port_info[7:0]==3)line_text=p2 ? "P2 COIN:R START:START   " : "P1 COIN:R START:START   ";
++ else line_text=p2 ? "P2 COIN:BTN5 START:BTN7 " : "P1 COIN:BTN5 START:BTN6 ";
++ end else if(p2 && mode!=3 && mode!=4 && mode!=6)line_text="P2: NOT AVAILABLE       ";
++ else case(mode)
++ 1:line_text="P1 COIN:L START:START   ";
++ 4,6:line_text=p2 ? "P2 COIN:SELECT START:ST " : "P1 COIN:SELECT START:ST ";
++ default:line_text=p2 ? "P2: MAPPED COIN/START   " : "P1: MAPPED COIN/START   ";
++ endcase
++ end else begin
++ column=index-104;
++ case(mode)
++ 0:line_text="AUTOFIRE: LLAPI BTN4    ";
++ 1:line_text="AUTOFIRE: A             ";
++ 4:line_text="AUTOFIRE: X             ";
++ 2:line_text="AUTOFIRE: MD3 C / MD6 X ";
++ 3:line_text="AUTOFIRE: D             ";
++ default:line_text="AUTOFIRE: UNAVAILABLE   ";
++ endcase
++ end
++end
++assign character=column<24 ? line_text[191-column*8 -:8] : 8'd32;
++endmodule
++
++
++module enhanced_info_byte(input [7:0] original,input [19:0] info,output [7:0] rendered,input [2:0] mode,input [7:0] diagnostics,input [1:0] af,input [3:0] last_fault);
++wire port_b=original>=17 && original<=31;
++wire port_a=original>=1 && original<=15;
++wire [7:0] offset=original-(port_b ? 8'd17 : 8'd1);
++wire [7:0] text_byte;
++controller_info_text u_text(port_b ? info[19:10] : info[9:0],offset[3:0],text_byte);
++wire [7:0] guide_byte;
++selected_interface_guide u_guide(mode,original[6:0],guide_byte);
++wire [7:0] shortcut_byte;
++controller_shortcut_text u_shortcut(info,original[6:0],mode,af,shortcut_byte);
++wire diagnostic_marker=original==127;
++wire [7:0] diagnostic_digit=8'd48+((diagnostics >> ((original==127 ? 3 : original-29)*2)) & 8'd3);
++// Reserved ROM markers for the two per-port latched reasons on the diagnostic page.
++wire fault_marker = original == 16 || original == 126;
++wire [1:0] reason = original == 16 ? last_fault[1:0] : last_fault[3:2];
++assign rendered=fault_marker ? (8'h30 + {6'b0,reason}) : diagnostic_marker ? diagnostic_digit : original[7] ? (original>=160 ? shortcut_byte : guide_byte) : (port_a||port_b) ? text_byte : original;
++endmodule
+diff --git a/enhanced/joydb15.v b/enhanced/joydb15.v
+new file mode 100644
+index 0000000..f0b6ec9
+--- /dev/null
++++ b/enhanced/joydb15.v
+@@ -0,0 +1,75 @@
++//Control module for DB15 Splitter of Antonio Villena by Aitor Pelaez (NeuroRulez)
++//Based on the ZXDOS module written by me too.
++//
++module joy_db15 
++(
++ input  clk,      //Reloj de Entrada sobre 48-50Mhz
++ output JOY_CLK,
++ output JOY_LOAD,  
++ input  JOY_DATA, 
++ output [15:0] joystick1,
++ output [15:0] joystick2
++);
++//Gestion de Joystick
++reg [15:0] JCLOCKS;
++always @(posedge clk) begin 
++   JCLOCKS <= JCLOCKS + 1'd1;
++end
++
++reg [15:0] joy1  = 16'hFFFF, joy2  = 16'hFFFF;
++reg joy_renew = 1'b1;
++reg [4:0]joy_count = 5'd0;
++
++`ifdef JTFRAME_SDRAM96
++assign JOY_CLK = JCLOCKS[4]; //con 3 Funciona = 3Mhz
++`else
++assign JOY_CLK = JCLOCKS[3]; //con 3 Funciona = 3Mhz
++`endif
++
++assign JOY_LOAD = joy_renew;
++always @(posedge JOY_CLK) begin 
++    if (joy_count == 5'd0) begin
++       joy_renew = 1'b0;
++    end else begin
++       joy_renew = 1'b1;
++    end
++    if (joy_count == 5'd25) begin
++      joy_count = 5'd0;
++    end else begin
++      joy_count = joy_count + 1'd1;
++    end      
++end
++always @(posedge JOY_CLK) begin
++    case (joy_count)
++        5'd2  : joy1[7] <= JOY_DATA;   //P1 D
++        5'd3  : joy1[6]  <= JOY_DATA;  //P1 C
++        5'd4  : joy1[5]  <= JOY_DATA;  //P1 B
++        5'd5  : joy1[4]  <= JOY_DATA;  //P1 A
++        5'd6  : joy1[0]  <= JOY_DATA;  //P1 Derecha
++        5'd7  : joy1[1]  <= JOY_DATA;  //P1 Izquierda
++        5'd8  : joy1[2]  <= JOY_DATA;  //P1 Abajo
++        5'd9  : joy1[3]  <= JOY_DATA;  //P1 Arriba
++        5'd10 : joy2[0]  <= JOY_DATA;  //  P2 Derecha
++        5'd11 : joy2[1]  <= JOY_DATA;  //  P2 Izquierda
++        5'd12 : joy2[2]  <= JOY_DATA;  //  P2 Abajo
++        5'd13 : joy2[3]  <= JOY_DATA;  //  P2 Arriba
++        5'd14 : joy1[9]  <= JOY_DATA;  //P1 F 
++        5'd15 : joy1[8]  <= JOY_DATA;  //P1 E 
++        5'd16 : joy1[11] <= JOY_DATA;  //P1 Select
++        5'd17 : joy1[10] <= JOY_DATA;  //P1 Start
++        5'd18 : joy2[9]  <= JOY_DATA;  //  P2 F
++        5'd19 : joy2[8]  <= JOY_DATA;  //  P2 E 
++        5'd20 : joy2[11] <= JOY_DATA;  //  P2 Select
++        5'd21 : joy2[10] <= JOY_DATA;  //  P2 Start
++        5'd22 : joy2[7]  <= JOY_DATA;  //  P2 D
++        5'd23 : joy2[6]  <= JOY_DATA;  //  P2 C
++        5'd24 : joy2[5]  <= JOY_DATA;  //  P2 B
++        5'd25 : joy2[4]  <= JOY_DATA;  //  P2 A
++        default:;
++    endcase              
++end
++//----LS FEDCBAUDLR
++assign joystick1[15:0] = ~joy1;
++assign joystick2[15:0] = ~joy2;
++
++endmodule
+\ No newline at end of file
+diff --git a/enhanced/jtframe_llapi_arcade.sv b/enhanced/jtframe_llapi_arcade.sv
+new file mode 100644
+index 0000000..fa8f4cf
+--- /dev/null
++++ b/enhanced/jtframe_llapi_arcade.sv
+@@ -0,0 +1,395 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Experimental JTFRAME bridge for the MiSTer-LLAPI arcade protocol.
++// Protocol implementation and arcade button IDs originate in
++// MiSTer-LLAPI/Arcade-IremM62_MiSTer, commit 4d637039.
++module jtframe_llapi_arcade #(
++    parameter BUTTONS=3, LOSS_MS=1000
++)(
++    input clk_50, clk_sys, rst, vblank, osd_active, enable, repoll_off,
++    input [6:0] user_in,
++    output logic [6:0] user_out,
++    input [15:0] usb1, usb2,
++    output [15:0] joy1, joy2,
++    output [3:0] start, coin,
++    output osd_request,
++    output [1:0] autofire_hold,
++    output [1:0] connected
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    ,input loss_resume
++    ,output loss_paused
++    ,output [1:0] loss_players
++    ,output [1:0] loss_countdown
++    ,input info_clk
++    ,output [19:0] controller_info
++    ,output [7:0] link_diagnostics
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++    ,output [63:0] poll_timing_us
++`endif
++    ,output [3:0] last_fault_reason
++    ,output [1:0] type_changed
++`endif
++);
++    wire [31:0] buttons1, buttons2;
++    wire [7:0] type1,type2;
++    wire en1,en2,latch1,data1,latch2,data2;
++    wire update1,update2,fault1,fault2;
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    wire [1:0] changed50;
++    wire [1:0] last_fault1,last_fault2;
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++    wire [63:0] timing50;
++`endif
++`endif
++    (* async_reg="true" *) reg rst50_meta=1, rst50_sync=1;
++    (* async_reg="true" *) reg osd50_meta=0, osd50_sync=0;
++    reg seen1=0,seen2=0;
++    wire valid1;
++    wire valid2;
++    reg repoll_off_meta = 0, repoll_off_sync = 0;
++    always @(posedge clk_50) begin
++        repoll_off_meta <= repoll_off;
++        repoll_off_sync <= repoll_off_meta;
++    end
++
++    always @(posedge clk_50) begin
++        rst50_meta<=rst; rst50_sync<=rst50_meta;
++        osd50_meta<=osd_active; osd50_sync<=osd50_meta;
++        if(rst50_sync) begin seen1<=0; seen2<=0; end
++        else begin
++            if(en1 && type1!=8'hff && |buttons1) seen1<=1;
++            if(en2 && type2!=8'hff && |buttons2) seen2<=1;
++        end
++    end
++    // Same physical USER port wiring and enable polarity as the arcade cores.
++    always_comb begin
++        user_out=7'h7f;
++        user_out[0]=latch1; user_out[1]=data1;
++        user_out[2]=osd50_sync;
++        user_out[4]=latch2; user_out[5]=data2;
++    end
++    LLAPI u_port1(.CLK_50M(clk_50),.LLAPI_SYNC(vblank),.REPOLL_OFF(repoll_off_sync),
++        .IO_LATCH_IN(user_in[0]),.IO_LATCH_OUT(latch1),
++        .IO_DATA_IN(user_in[1]),.IO_DATA_OUT(data1),.ENABLE(enable && ~osd50_sync),
++        .LLAPI_BUTTONS(buttons1),.LLAPI_ANALOG(),.LLAPI_TYPE(type1),
++        .LLAPI_MODES(),.LLAPI_EN(en1),.STATUS_VALID(valid1),.STATUS_UPDATE(update1),.LINK_FAULT(fault1)
++`ifdef JTFRAME_ENHANCED_CONTROLS
++        ,.TYPE_CHANGED(changed50[0]),.LAST_FAULT_REASON(last_fault1)
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++        ,.poll_timing_us(timing50)
++`endif
++`endif
++    );
++    LLAPI u_port2(.CLK_50M(clk_50),.LLAPI_SYNC(vblank),.REPOLL_OFF(repoll_off_sync),
++        .IO_LATCH_IN(user_in[4]),.IO_LATCH_OUT(latch2),
++        .IO_DATA_IN(user_in[5]),.IO_DATA_OUT(data2),.ENABLE(enable && ~osd50_sync),
++        .LLAPI_BUTTONS(buttons2),.LLAPI_ANALOG(),.LLAPI_TYPE(type2),
++        .LLAPI_MODES(),.LLAPI_EN(en2),.STATUS_VALID(valid2),.STATUS_UPDATE(update2),.LINK_FAULT(fault2)
++`ifdef JTFRAME_ENHANCED_CONTROLS
++        ,.TYPE_CHANGED(changed50[1]),.LAST_FAULT_REASON(last_fault2)
++`endif
++    );
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    (* async_reg="true" *) reg resume_meta=0,resume_sync=0;
++    reg resume_old=0;
++    always @(posedge clk_50) begin
++        resume_meta<=loss_resume; resume_sync<=resume_meta; resume_old<=resume_sync;
++    end
++    // ID changes are separated by at least one full serial status transaction.
++    // Toggle each bit so even a single 50 MHz strobe reaches the game clock.
++    reg [1:0] change_toggle=0,change_previous=0;
++    (* async_reg="true" *) reg [1:0] change_meta=0,change_sync=0;
++    always @(posedge clk_50) begin
++        if(rst50_sync) change_toggle<=0;
++        else change_toggle<=change_toggle ^ changed50;
++    end
++    always @(posedge clk_sys) begin
++        if(rst) begin change_meta<=0;change_sync<=0;change_previous<=0;end
++        else begin
++            change_meta<=change_toggle;
++            change_sync<=change_meta;
++            change_previous<=change_sync;
++        end
++    end
++    assign type_changed=change_sync ^ change_previous;
++    wire loss50;
++    wire [1:0] countdown50;
++    wire [1:0] lost_ports,rediscover_unused;
++    controller_loss_clocked #(.LOSS_MS(LOSS_MS)) loss_policy(
++        .clk(clk_50),.rst(rst50_sync),.enable(enable),.observe(!osd50_sync),
++        .resume(resume_sync ^ resume_old),.connected({valid2,valid1}),
++        .paused(loss50),.countdown(countdown50),.lost(lost_ports),.rediscover(rediscover_unused));
++    // Bundled mailbox: source holds all three state bits until destination acknowledges.
++    reg [4:0] loss_mailbox=0;
++    reg loss_request=0,loss_ack=0;
++    (* async_reg="true" *) reg ack_meta=0,ack_sync=0,req_meta=0,req_sync=0;
++    reg [4:0] loss_snapshot=0;
++    always @(posedge clk_50) begin
++        ack_meta<=loss_ack;ack_sync<=ack_meta;
++        if(rst50_sync) begin loss_mailbox<=0;loss_request<=0;ack_meta<=0;ack_sync<=0;end
++        else if(loss_request==ack_sync && loss_mailbox!={lost_ports,loss50,countdown50}) begin
++            loss_mailbox<={lost_ports,loss50,countdown50};loss_request<=~loss_request;
++        end
++    end
++    always @(posedge clk_sys) begin
++        req_meta<=loss_request;req_sync<=req_meta;
++        if(rst) begin req_meta<=0;req_sync<=0;loss_ack<=0;loss_snapshot<=0;end
++        else if(req_sync!=loss_ack) begin loss_snapshot<=loss_mailbox;loss_ack<=req_sync;end
++    end
++    assign loss_players=loss_snapshot[4:3];
++    assign loss_paused=loss_snapshot[2];
++    assign loss_countdown=loss_snapshot[1:0];
++`endif
++    // Button levels are slow asynchronous inputs, not a streamed data bus.
++    // Constrain only the first sampling stages; retain timing between stages.
++    (* async_reg="true" *) reg [31:0] buttons1_meta=0,buttons1_sync=0;
++    (* async_reg="true" *) reg [31:0] buttons2_meta=0,buttons2_sync=0;
++    (* async_reg="true" *) reg valid1_meta=0,valid1_sync=0;
++    (* async_reg="true" *) reg valid2_meta=0,valid2_sync=0;
++    (* async_reg="true" *) reg saturn1_meta=0,saturn1_sync=0,saturn2_meta=0,saturn2_sync=0;
++    always @(posedge clk_sys) begin
++        if(rst) begin
++            saturn1_meta<=0;saturn1_sync<=0;saturn2_meta<=0;saturn2_sync<=0;
++            buttons1_meta<=0; buttons1_sync<=0;
++            buttons2_meta<=0; buttons2_sync<=0;
++            valid1_meta<=0; valid1_sync<=0;
++            valid2_meta<=0; valid2_sync<=0;
++        end else begin
++            saturn1_meta<=valid1 && type1==8'd3;saturn1_sync<=saturn1_meta;
++            saturn2_meta<=valid2 && type2==8'd3;saturn2_sync<=saturn2_meta;
++            buttons1_meta<=buttons1; buttons1_sync<=buttons1_meta;
++            buttons2_meta<=buttons2; buttons2_sync<=buttons2_meta;
++            valid1_meta<=valid1; valid1_sync<=valid1_meta;
++            valid2_meta<=valid2; valid2_sync<=valid2_meta;
++        end
++    end
++assign connected={valid2_sync,valid1_sync};
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    // Freeze on the same synchronized OSD signal that disables transport.
++    // Driver nonblocking reset cannot erase the preceding captured identity.
++    llapi_link_diagnostics u_link_diagnostics(
++        .clk(clk_50),.dst_clk(info_clk),.rst(rst50_sync),
++        .observe(enable && !osd50_sync),.updates({update2,update1}),
++        .faults({fault2,fault1}),.reasons({last_fault2,last_fault1}),
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++        .timing_us(timing50),.timing_snapshot(poll_timing_us),
++`endif
++        .snapshot(link_diagnostics),.last_fault(last_fault_reason));
++    controller_info_snapshot u_controller_info(
++        .src_clk(clk_50),.dst_clk(info_clk),.rst(rst),
++        .freeze(osd50_sync),.observe(enable),
++        .connected({valid2,valid1}),.type_a(type1),.type_b(type2),
++        .snapshot(controller_info));
++`endif
++
++`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
++    // Bit3 is unused by the existing arcade map (bits0..2 are game buttons).
++    // Current SNES reference maps it to X; Genesis six-button maps it to Y.
++    // Keep the already-tested bit2 autofire alias only in two-button cores.
++    assign autofire_hold={valid2_sync && (buttons2_sync[3] || (BUTTONS<3 && buttons2_sync[2])),
++                          valid1_sync && (buttons1_sync[3] || (BUTTONS<3 && buttons1_sync[2]))};
++`else
++    assign autofire_hold=0;
++`endif
++    jtframe_llapi_arcade_map #(.BUTTONS(BUTTONS)) u_map(
++        .buttons1(buttons1_sync),.buttons2(buttons2_sync),
++        .saturn1(saturn1_sync),.saturn2(saturn2_sync),
++        .valid1(valid1_sync),.valid2(valid2_sync),.osd_active(osd_active),
++        .usb1(usb1),.usb2(usb2),.joy1(joy1),.joy2(joy2),
++        .start(start),.coin(coin),.osd_request(osd_request));
++endmodule
++
++module jtframe_llapi_arcade_map #(parameter BUTTONS=3)(
++    input [31:0] buttons1,buttons2,
++    input valid1,valid2,osd_active,
++    input tri0 saturn1,saturn2,
++    input [15:0] usb1,usb2,
++    output [15:0] joy1,joy2,
++    output [3:0] start,coin,
++    output osd_request
++);
++    wire [31:0] p1=valid1 ? buttons1 : 32'd0;
++    wire [31:0] p2=valid2 ? buttons2 : 32'd0;
++    assign osd_request=(p1[26]&p1[5]&p1[0]) | (p2[26]&p2[5]&p2[0]);
++    wire inhibit=osd_active | osd_request;
++    function automatic [15:0] game_buttons(input [31:0] p);
++        integer n;
++        begin
++            game_buttons=0;
++            game_buttons[3:0]=p[27:24]; // up, down, left, right
++            for(n=0;n<3;n=n+1)
++                if(n<BUTTONS) game_buttons[4+n]=p[n];
++        end
++    endfunction
++    // Preserve the existing arcade allocation: one LLAPI socket reserves
++    // its player slot; USB player 1 fills the other slot.
++    assign joy1=valid1 ? (inhibit ? 16'd0 : game_buttons(p1)) : usb1;
++    assign joy2=valid2 ? (inhibit ? 16'd0 : game_buttons(p2)) :
++                         (valid1 ? usb1 : usb2);
++    // Arcade convention: button 5 starts P1 and button 6 starts P2,
++    // from either socket. Button 4 is that socket's coin input.
++    assign start=inhibit ? 4'd0 : {2'b0,(!saturn1 && p1[6]) | (saturn2 ? p2[5] : p2[6]),p1[5] | (!saturn2 && p2[5])};
++    assign coin=inhibit ? 4'd0 : {2'b0,(saturn2 ? p2[6] : p2[4]),(saturn1 ? p1[6] : p1[4])};
++endmodule
++
++
++`ifdef JTFRAME_ENHANCED_CONTROLS
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Optional core UI helper, not part of the LLAPI transport driver.
++// Shared reset required. freeze must assert before transport ENABLE is cleared.
++module controller_info_snapshot(
++ input src_clk,dst_clk,rst,freeze,observe,
++ input [1:0] connected,
++ input [7:0] type_a,type_b,
++ output reg [19:0] snapshot=0
++);
++// Per-port state: 00 never seen, 01 last connected, 10 observed disconnect.
++reg [19:0] latest=0,mailbox=0;
++reg request=0,ack=0;
++(* async_reg="true" *) reg ack_meta=0,ack_sync=0,req_meta=0,req_sync=0;
++reg [19:0] next_info;
++always @* begin
++ next_info=latest;
++ if(observe && !freeze) begin
++  if(connected[0]) next_info[9:0]={2'b01,type_a};
++  else if(latest[9:8]!=0) next_info[9:8]=2'b10;
++  if(connected[1]) next_info[19:10]={2'b01,type_b};
++  else if(latest[19:18]!=0) next_info[19:18]=2'b10;
++ end
++end
++always @(posedge src_clk) begin
++ ack_meta<=ack;ack_sync<=ack_meta;
++ if(rst) begin latest<=0;mailbox<=0;request<=0;ack_meta<=0;ack_sync<=0;end
++ else begin
++  latest<=next_info;
++  // Hold bundled data until destination acknowledges; updates coalesce.
++  if(request==ack_sync && mailbox!=next_info) begin
++   mailbox<=next_info;request<=~request;
++  end
++ end
++end
++always @(posedge dst_clk) begin
++ req_meta<=request;req_sync<=req_meta;
++ if(rst) begin snapshot<=0;ack<=0;req_meta<=0;req_sync<=0;end
++ else if(req_sync!=ack) begin snapshot<=mailbox;ack<=req_sync;end
++end
++endmodule
++`endif
++
++`ifdef JTFRAME_ENHANCED_CONTROLS
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Core policy, not transport: confirmed loss pauses until explicit acknowledgement.
++// ms_tick is a one-clock strobe from a wall-time millisecond timebase.
++// Observe must be low when polling is intentionally suspended or interface changes.
++module controller_loss_pause #(parameter LOSS_MS=1000)(
++ input clk,rst,enable,observe,ms_tick,resume,
++ input [1:0] connected,
++ output reg paused=0,
++ output reg [1:0] lost=0,rediscover=0,countdown=0
++);
++localparam W=LOSS_MS<2?1:$clog2(LOSS_MS+1);
++reg[1:0] armed=0;
++reg[W-1:0] count[0:1];
++reg[9:0] second_ms=0;
++wire[1:0] missing=armed & ~connected;
++integer p;
++always @(posedge clk) begin
++ rediscover<=0;
++ if(rst || !enable)begin
++  paused<=0;lost<=0;armed<=0;countdown<=0;second_ms<=0;
++  count[0]<=0;count[1]<=0;
++ end else if(!observe)begin
++  count[0]<=0;count[1]<=0;countdown<=0;second_ms<=0;
++ end else begin
++  armed<=armed|connected;
++  if(paused)begin
++   lost<=lost|missing;
++   if(|missing)begin countdown<=0;second_ms<=0;end
++   else if(countdown==0)begin countdown<=3;second_ms<=0;end
++   else if(ms_tick)begin
++    if(second_ms==999)begin
++     second_ms<=0;countdown<=countdown-1'b1;
++     if(countdown==1)begin paused<=0;lost<=0;count[0]<=0;count[1]<=0;end
++    end else second_ms<=second_ms+1'b1;
++   end
++  end else for(p=0;p<2;p=p+1)begin
++   if(connected[p]) count[p]<=0;
++   else if(armed[p] && ms_tick)begin
++    if(count[p]==LOSS_MS-1)begin
++     paused<=1;lost[p]<=1;rediscover[p]<=1;count[p]<=0;
++    end else count[p]<=count[p]+1'b1;
++   end
++  end
++ end
++end
++endmodule
++
++// SPDX-License-Identifier: GPL-3.0-or-later
++// All inputs/outputs belong to clk. Integrator must synchronize crossings.
++module controller_loss_clocked #(parameter CLK_HZ=50000000, LOSS_MS=1000)(
++ input clk,rst,enable,observe,resume,
++ input [1:0] connected,
++ output paused,
++ output [1:0] lost,rediscover,
++ output [1:0] countdown
++);
++localparam TICKS=CLK_HZ/1000;
++localparam W=TICKS<2 ? 1 : $clog2(TICKS);
++reg [W-1:0] divider=0;
++wire ms_tick=divider==TICKS-1;
++always @(posedge clk) begin
++ if(rst || !enable || ms_tick) divider<=0;
++ else divider<=divider+1'b1;
++end
++controller_loss_pause #(.LOSS_MS(LOSS_MS)) policy(.*);
++endmodule
++
++`endif
++
++`ifdef JTFRAME_ENHANCED_CONTROLS
++// Core-only bounded diagnostic counters. A fault is not proof of physical unplug.
++// Counts survive OSD polling suspension; reset with the core. 3 means 3 or more.
++module llapi_link_diagnostics(input clk,dst_clk,rst,observe,
++ input [1:0] updates,faults,output wire [7:0] snapshot,
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++ input [63:0] timing_us,output wire [63:0] timing_snapshot,
++`endif
++ input [3:0] reasons,output wire [3:0] last_fault);
++reg [7:0] counts=0;
++reg [3:0] retained_reason=0;
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++localparam [75:0] EMPTY = {64'hFFFF_FFFF_FFFF_FFFF, 12'd0};
++wire [75:0] next_sample = {timing_us, retained_reason, counts};
++reg [75:0] mailbox=EMPTY,received=EMPTY;
++assign {timing_snapshot,last_fault,snapshot}=received;
++`else
++localparam [11:0] EMPTY=0;
++wire [11:0] next_sample={retained_reason,counts};
++reg [11:0] mailbox=EMPTY,received=EMPTY;
++assign {last_fault,snapshot}=received;
++`endif
++reg request=0,ack=0;
++(* async_reg="true" *) reg ack_meta=0,ack_sync=0,req_meta=0,req_sync=0;
++integer p;
++always @(posedge clk) begin
++ ack_meta<=ack;ack_sync<=ack_meta;
++ if(rst) begin counts<=0;retained_reason<=0;mailbox<=EMPTY;request<=0;ack_meta<=0;ack_sync<=0;end
++ else begin
++  for(p=0;p<2;p=p+1) if(observe) begin
++   if(updates[p] && counts[p*4+:2]!=3) counts[p*4+:2]<=counts[p*4+:2]+1'b1;
++   if(faults[p] && counts[p*4+2+:2]!=3) counts[p*4+2+:2]<=counts[p*4+2+:2]+1'b1;
++  end
++  // Retain the last fault through OSD polling suspension. A healthy update
++  // does not erase the explanation for an earlier failure.
++  for(p=0;p<2;p=p+1) if(observe && faults[p]) retained_reason[p*2+:2]<=reasons[p*2+:2];
++  if(request==ack_sync && mailbox!=next_sample) begin
++   mailbox<=next_sample;request<=~request;
++  end
++ end
++end
++always @(posedge dst_clk) begin
++ req_meta<=request;req_sync<=req_meta;
++ if(rst) begin received<=EMPTY;ack<=0;req_meta<=0;req_sync<=0;end
++ else if(req_sync!=ack) begin received<=mailbox;ack<=req_sync;end
++end
++endmodule
++`endif
+diff --git a/enhanced/jtframe_llapi_protocol.sv b/enhanced/jtframe_llapi_protocol.sv
+new file mode 100644
+index 0000000..a3ab0b0
+--- /dev/null
++++ b/enhanced/jtframe_llapi_protocol.sv
+@@ -0,0 +1,775 @@
++/* HDL implementation of Low-Latency API protocol
++* 
++* Copyright 2019 Jamie Dickson aka Kitrinx
++* 
++* Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
++* documentation files (the "Software"), to deal in the Software without restriction, including without limitation
++* the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
++* and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
++* 
++* The above copyright notice and this permission notice shall be included in all copies or substantial portions
++* of the Software.
++* 
++* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
++* TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
++* CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++* IN THE SOFTWARE.
++*/
++
++// Feb, 1 2019 - Initial Release
++
++// ***** NOTE ******
++// On IO board 5.5 the bliss box requires external pull-up resistors to communicate properly
++
++// Data payload bit order:
++
++// Byte 0:
++// uint8_t Controller Type (or error code)
++// Notable ID's are:
++// 18 - NES
++// 21 - Gen 3 button
++// 22 - Gen 6 button
++// 27 - SNES
++// 28 - NES Zapper
++// 41 - Atari Paddles
++// 51 - NeGcon
++// 65 - PSX Digital
++// 11 - PSX DS
++// 12 - PSX DS2
++// more info: https://docs.google.com/document/d/12XpxrmKYx_jgfEPyw-O2zex1kTQZZ-NSBdLO2RQPRzM/edit
++
++// Bytes 1-2:
++// Buttons
++// XXX: These are not accurate in 3.0, see the linked document instead
++// System SNES    Genesis PSX    Gun   Saturn
++//  0:     Y       A       □      Click A
++//  1:     B       B       ×      Light B
++//  2:     X       X       △      NA    X
++//  3:     A       Y       ○      NA    Y
++//  4:     Select  Mode    Select NA    NA
++//  5:     Start   Start   Start  NA    Start
++//  6:     LT      NA      L1     NA    L
++//  7:     RT      NA      R1     NA    R
++
++//  8:     NA      Z       L2     NA    Z
++//  9:     NA      C       R2     NA    C
++// 10:     U       U       U      NA    NA
++// 11:     D       D       D      NA    NA
++// 12:     L       L       L      NA    NA
++// 13:     R       R       R      NA    NA
++// 14:     0       NA      L3     NA    NA
++// 15:     1       NA      R3     NA    NA
++
++// 16:     2       NA      NA     NA    NA
++// 17:     3       NA      NA     NA    NA
++// 18:     4       NA      NA     NA    NA
++// 19:     5       NA      NA     NA    NA
++// 20:     6       NA      NA     NA    NA
++// 21:     7       NA      NA     NA    NA
++// 22:     8       NA      NA     NA    NA
++// 23: This bit can be the "special" trigger button for retroarch
++// more info: https://docs.google.com/spreadsheets/d/1Bk3j5kaKfV1tOfzCq3GLKFsff027RdmwOuSfBLM3Ims/edit#gid=0
++
++// Bytes 4-12: (uint8_t's)
++// 04: Axis 1 X
++// 05: Axis 1 Y
++// 06: Axis 1 Z
++// 07: Axis 2 X
++// 08: Axis 2 Y
++// 09: Axis 2 Z
++// 10: Slider
++// 11: Dial
++// 12: Hat
++
++// Modes:
++// 0: autopause state
++// 1:
++// 2: 
++// 3: Hotswap Disabled
++// 4: UDLR mode
++// 5: Analog to D-pad
++// 6: autopause dis.
++// 7: d-pad only mode
++
++module LLAPI_Enhanced #(
++    parameter bit AUTO_MODES = 1,
++    parameter bit COMMAND_INTERFACE = 0,
++    parameter bit ALLOW_MODE_WRITES = 0,
++    parameter bit RAW_COMMANDS = 0,
++    parameter bit IMMEDIATE_REPOLL = 0
++)
++(
++	input         CLK_50M,
++	input         REPOLL_OFF,
++    input         ENABLE,        // If 0, module will be disabled and pins will be set to Z
++	input         IO_LATCH_IN,   // D+ top level IO pin
++	output reg    IO_LATCH_OUT,
++	input         IO_DATA_IN,    // D- top level IO pin
++	output reg    IO_DATA_OUT,
++	input         LLAPI_SYNC,     // Pos edge corresponds with when the core needs the data, from core
++	output        LLAPI_EN,       // High when device is communicating, passed to core
++	output [7:0]  LLAPI_TYPE,     // Enumerated controller type, passed to core
++	output [7:0]  LLAPI_MODES,    // Modes that the bliss box may be in, passed to core
++	output [31:0] LLAPI_BUTTONS,  // Vector of buttons, 1 == pressed, passed to core
++	output [71:0] LLAPI_ANALOG,   // Unsigned 8 bit vector of analog axis, passed to core
++    input CMD_VALID,
++    input [7:0] CMD_OPCODE,
++    input [15:0] CMD_PAYLOAD, // low byte first: duration, then level for 1C
++    output CMD_READY,
++    output reg CMD_DONE,
++    output reg [7:0] CMD_ERROR, // 0=completed, E0=timeout, E1=rejected, E2=premature raw reply
++    output reg [103:0] CMD_REPLY,
++    output reg [3:0] CMD_REPLY_LENGTH,
++    output reg MODES_VALID,
++    // CLK_50M domain. VALID refers to the last complete status snapshot,
++    // not proof of physical presence. UPDATE/FAULT are one-cycle events.
++    output STATUS_VALID,
++    output reg STATUS_UPDATE,
++    output reg LINK_FAULT,
++    // Valid only with LINK_FAULT: 1 timeout, 2 rejected status, 3 receive-phase watchdog.
++    output [1:0] FAULT_REASON,
++    // Pulse with the new complete snapshot on a direct valid-to-valid ID change.
++    output reg TYPE_CHANGED,
++    // Persists through successful reports and rediscovery until this port is disabled.
++    output reg [1:0] LAST_FAULT_REASON,
++    // Extension command descriptor, sampled with CMD_VALID && CMD_READY.
++    input CMD_RAW,
++    input [4:0] CMD_TX_LENGTH,
++    input [3:0] CMD_RX_LENGTH,
++    input [191:0] CMD_TX_DATA,
++    output [63:0] poll_timing_us
++);
++
++// Commands
++enum bit [7:0] {
++	LLAPI_POLL               = 8'h00, // Holds latch low until done
++	LLAPI_STATUS             = 8'h01, // Returns 13 bytes, see above
++	LLAPI_PRESSURE_STATUS    = 8'h02, // Returns 13 bytes: player ID then 12 pressures
++	LLAPI_SET_MODES          = 8'h20, // Requires 1 byte payload
++	LLAPI_GET_MODES          = 8'h21, // Returns bit field of active modes, 1 byte. see above
++	// Rumble
++	LLAPI_RUMBLE_CONST_START_FROM_PARMS = 8'h11, //must set parms first
++	LLAPI_RUBMLE_CONST_END              = 8'h12,
++	LLAPI_RUMBLE_SINE_START_FROM_PARMS  = 8'h14, //must set parms first
++	LLAPI_RUMBLE_SINE_END               = 8'h18,
++	LLAPI_RUMBLE_CONST_JOLT             = 8'h1A,
++	LLAPI_RUMBLE_SINE_JOLT              = 8'h1B,
++	LLAPI_RUMBLE_PARMS                  = 8'h1C //followed by 2 bytes of data containing the parms (duration and then level)
++} commands;
++
++// Errors
++enum bit [7:0] {
++	LLAPI_ERROR_NODATA       = 8'h00,
++	LLAPI_ERROR_AP_NO_REPORT = 8'hFF
++} errors;
++
++// Timing (one 50mhz cycle == 0.02us)
++enum bit [20:0] {
++	TIME_POLL   = 21'd350000, // 7ms - default polling period if no sync is used
++	TIME_SETTLE = 21'd150,    // 3us - to account for bidirectional IO pins slew rate
++	TIME_WAIT   = 21'd500,    // 10us - time to wait after a reply before writing again
++	TIME_LEADIN = 21'd84,     // 1.5us - at start of new transactions
++	TIME_BIT_H  = 21'd109,    // 2.2us - always-high first bit-half
++	TIME_BIT_R  = 21'd115,    // 2.3us - variable second bit-half
++	TIME_SYNC_H = 21'd49,     // 1us - sync pulse between bytes high time
++	TIME_SYNC_L = 21'd50,     // 1us - sync pulse between bytes low time
++	TIME_BUFFER = 21'd9500    // 3 scanlines of wiggle room
++} time_periods;
++
++typedef enum bit [3:0] {
++	READ_IDLE,
++	READ_POLL,
++	WRITE_STATUS,
++	READ_STATUS,
++	WRITE_SETUP,
++	WRITE_MODES,
++	READ_MODES,
++    READ_COMMAND,
++    WRITE_PAYLOAD
++} execution_stage;
++
++typedef enum bit [3:0] {
++	STATE_IDLE,
++	STATE_WRITE_START,
++	STATE_WRITE,
++	STATE_WRITE_END,
++	STATE_READ_START,
++	STATE_READ_WAIT,
++	STATE_READ,
++	STATE_READ_END,
++    STATE_WAIT_RELEASE
++} execution_state;
++
++// Conservative receive-start limit: 1 ms at 50 MHz; requires hardware validation.
++localparam [20:0] RECEIVE_START_TIMEOUT = 21'd50000;
++
++logic [20:0]  cycle, poll_offset, poll_counter, poll_offset_latch, sync_counter;
++// count reaches at most TIME_WAIT+1=501; larger values reset before increment commits.
++localparam integer COUNT_WIDTH = $clog2(TIME_WAIT + 2);
++logic [COUNT_WIDTH-1:0] count;
++localparam bit RAW_ENABLED = COMMAND_INTERFACE && RAW_COMMANDS;
++localparam integer WRITE_BITS = RAW_ENABLED ? 200 : 32;
++logic [WRITE_BITS-1:0] write_buffer;
++logic [3:0]   write_length;
++logic [2:0]   read_bit; // Relies on overflow
++logic [3:0]   read_byte;
++logic [7:0]   read_buffer[13];
++logic [3:0]   read_length;
++
++logic repoll_pending;
++logic modes_attempted, command_busy, command_slot;
++localparam integer PAYLOAD_COUNT_BITS = RAW_ENABLED ? 5 : 2;
++logic [PAYLOAD_COUNT_BITS-1:0] payload_remaining;
++wire request_raw = RAW_ENABLED && CMD_RAW;
++logic raw_selected;
++wire raw_active = RAW_ENABLED && command_busy && raw_selected;
++logic [7:0] active_opcode;
++localparam integer TRANSACTION_LIMIT = TIME_POLL > RECEIVE_START_TIMEOUT ? TIME_POLL : RECEIVE_START_TIMEOUT;
++localparam integer TRANSACTION_WIDTH = $clog2(TRANSACTION_LIMIT + 1);
++logic [TRANSACTION_WIDTH-1:0] transaction_timer;
++function automatic valid_command(input [7:0] op);
++    valid_command = op == 8'h02 || op == 8'h21 || op == 8'h11 || op == 8'h12 ||
++        op == 8'h14 || op == 8'h18 || op == 8'h1a || op == 8'h1b || op == 8'h1c ||
++        (ALLOW_MODE_WRITES && op == 8'h20);
++endfunction
++// The built-in scheduler owns poll/status; mode writes retain their typed opt-in.
++wire extension_valid = CMD_OPCODE > 8'h01 && CMD_OPCODE != 8'h20 &&
++    !valid_command(CMD_OPCODE) && CMD_TX_LENGTH <= 24 && CMD_RX_LENGTH <= 13;
++
++function automatic protocol_error(input [7:0] v);
++    protocol_error = v == 8'hf1 || v == 8'hfe || v == 8'hff;
++endfunction
++logic [31:0] pending_buttons;
++logic [71:0] pending_analog;
++// Decode the receive buffer directly; public registers still update only after packet_complete.
++assign pending_buttons = {
++							4'd0, 
++							(read_buffer[12][3] ? 4'd0 :
++							{
++								(read_buffer[12][2:0] == 3'h0 || read_buffer[12][2:0] == 3'h1 || read_buffer[12][2:0] == 3'h7), //U
++								(read_buffer[12][2:0] == 3'h4 || read_buffer[12][2:0] == 3'h3 || read_buffer[12][2:0] == 3'h5), //D
++								(read_buffer[12][2:0] == 3'h6 || read_buffer[12][2:0] == 3'h5 || read_buffer[12][2:0] == 3'h7), //L
++								(read_buffer[12][2:0] == 3'h2 || read_buffer[12][2:0] == 3'h1 || read_buffer[12][2:0] == 3'h3) //R
++							}),
++							read_buffer[3],
++							read_buffer[2],
++							read_buffer[1]
++						};
++assign pending_analog = {
++							read_buffer[12],
++							read_buffer[11],
++							read_buffer[10],
++							read_buffer[9],
++							read_buffer[8],
++							read_buffer[7],
++							read_buffer[6],
++							read_buffer[5],
++							read_buffer[4]
++						};
++logic [7:0] pending_type;
++logic packet_complete;
++logic [31:0]  lljs_buttons;
++logic [71:0]  lljs_analog;
++logic [7:0]   lljs_type;
++logic [7:0]   lljs_modes;
++
++reg   [20:0]  poll_time = TIME_POLL;
++
++logic latch;
++logic is_latched;
++logic data_in, data_out;
++logic enable;
++logic old_sync, new_sync, old_data;
++
++execution_stage stage = READ_IDLE;
++execution_state state = STATE_IDLE;
++
++wire auxiliary = command_busy || stage == READ_MODES;
++wire repoll_due = IMMEDIATE_REPOLL && !REPOLL_OFF && repoll_pending && stage == READ_IDLE;
++wire transaction_active = state != STATE_WAIT_RELEASE && (stage != READ_IDLE || state != STATE_IDLE || repoll_due);
++wire watchdog_expired = transaction_active &&
++    transaction_timer >= ((stage == READ_POLL || raw_active) ? TIME_POLL : RECEIVE_START_TIMEOUT);
++wire premature_reply = raw_active && state == STATE_IDLE && stage == WRITE_PAYLOAD && is_latched;
++wire poll_due = sync_counter >= ((enable && poll_time > TIME_BUFFER &&
++    poll_offset < poll_time - TIME_BUFFER) ? poll_time - poll_offset : poll_time);
++assign CMD_READY = COMMAND_INTERFACE && ENABLE && enable && command_slot &&
++    !command_busy && stage == READ_IDLE && state == STATE_IDLE &&
++    !is_latched && data_in && (!poll_due || repoll_due) && cycle > TIME_WAIT;
++assign LLAPI_TYPE = lljs_type;
++assign LLAPI_BUTTONS = lljs_buttons;
++assign LLAPI_ANALOG = lljs_analog;
++assign LLAPI_MODES = lljs_modes;
++assign LLAPI_EN = enable;
++// Reuse existing snapshot identity and link state: no extra validity register.
++assign STATUS_VALID = ENABLE && enable && lljs_type != 0 && !protocol_error(lljs_type);
++
++assign FAULT_REASON = LINK_FAULT ? LAST_FAULT_REASON : 2'd0;
++
++always_comb begin
++	if (latch) begin
++		IO_LATCH_OUT = 1'b0;
++		IO_DATA_OUT = data_out;
++	end else begin
++		IO_LATCH_OUT = 1'b1;
++		IO_DATA_OUT = 1'b1;
++	end
++end
++
++// Use the regular synchronous disable path on the first clock after FPGA configuration.
++logic startup_complete = 1'b0;
++always_ff @(posedge CLK_50M) begin
++    startup_complete <= 1'b1;
++    if (ENABLE && startup_complete) begin
++    CMD_DONE <= 0; STATUS_UPDATE <= 0; TYPE_CHANGED <= 0; LINK_FAULT <= 0;
++    if (transaction_active) begin
++        if (transaction_timer != {TRANSACTION_WIDTH{1'b1}}) transaction_timer <= transaction_timer + 1'b1;
++    end else transaction_timer <= 0;
++	old_sync <= new_sync;
++	new_sync <= LLAPI_SYNC;
++	cycle <= cycle + 1'b1;
++
++	if (~latch) begin
++		is_latched <= ~IO_LATCH_IN;
++		old_data <= data_in;
++		data_in <= IO_DATA_IN;
++	end
++
++	if (~old_sync && new_sync && sync_counter > poll_offset_latch) begin
++		sync_counter <= 0;
++		poll_time <= poll_counter > (TIME_BUFFER + TIME_WAIT) ? poll_counter - TIME_BUFFER : TIME_POLL; // about 3 scanlines of wobble room
++		poll_counter <= 0;
++	end else begin
++		if (sync_counter != 21'h1fffff) sync_counter <= sync_counter + 1'b1;
++		if (poll_counter != 21'h1fffff) poll_counter <= poll_counter + 1'b1;
++	end
++
++	if (stage == READ_POLL || stage == READ_STATUS)
++		if (poll_offset != 21'h1fffff) poll_offset <= poll_offset + 1'b1;
++
++    // The deadline wins the entire clock, including status and auxiliary reply publication.
++    if (watchdog_expired || premature_reply) begin
++        repoll_pending <= 0;
++        if (is_latched || !data_in) state <= STATE_WAIT_RELEASE; else state <= STATE_IDLE;
++        stage <= READ_IDLE; cycle <= 0; count <= 0; transaction_timer <= 0;
++        latch <= 0; data_out <= 1; packet_complete <= 0; payload_remaining <= 0;
++        LINK_FAULT <= 1;
++        LAST_FAULT_REASON <= (state == STATE_READ || state == STATE_READ_WAIT) ? 2'd3 : 2'd1;
++        if (premature_reply && !watchdog_expired) LAST_FAULT_REASON <= 2'd2;
++        if (command_busy) begin
++            CMD_DONE <= 1;
++            CMD_ERROR <= watchdog_expired ? 8'he0 : 8'he2;
++            command_busy <= 0;
++        end
++        if (!auxiliary || is_latched || !data_in) begin
++            enable <= 0; lljs_type <= 0; lljs_buttons <= 0;
++            lljs_analog <= 72'h080000808080808080;
++            lljs_modes <= 0; MODES_VALID <= 0; modes_attempted <= 0;
++        end
++    end else case (state)
++		STATE_IDLE: begin
++			if (is_latched) begin // remote device wants to talk
++				enable <= 1'b1;
++				cycle <= 0;
++				count <= 0;
++				read_byte <= 0;
++                packet_complete <= 0;
++				state <= STATE_READ_START;
++			end else if (stage == WRITE_PAYLOAD) begin
++                if (cycle > TIME_WAIT && data_in) begin
++                    cycle <= 0; state <= STATE_WRITE_START; stage <= READ_COMMAND;
++                end
++            end else if (CMD_READY && CMD_VALID) begin
++                command_slot <= 0; CMD_ERROR <= 0; CMD_REPLY <= 0; CMD_REPLY_LENGTH <= 0;
++                if (!(request_raw ? extension_valid : valid_command(CMD_OPCODE))) begin CMD_DONE <= 1; CMD_ERROR <= 8'he1; end
++                else begin
++                    command_busy <= 1; active_opcode <= CMD_OPCODE; raw_selected <= request_raw;
++                    write_buffer <= request_raw ? {CMD_TX_DATA, CMD_OPCODE} : {CMD_PAYLOAD, CMD_OPCODE};
++                    payload_remaining <= request_raw ? CMD_TX_LENGTH : CMD_OPCODE == 8'h1c ? 2 : (CMD_OPCODE == 8'h20 ? 1 : 0);
++                    read_length <= request_raw ? CMD_RX_LENGTH : CMD_OPCODE == 8'h02 ? 13 : (CMD_OPCODE == 8'h21 ? 1 : 0);
++                    stage <= READ_COMMAND; state <= STATE_WRITE_START;
++                    cycle <= 0; transaction_timer <= 0;
++                end
++            end else if (stage == WRITE_STATUS) begin // We just got a poll result
++				if (cycle > TIME_WAIT) begin
++					cycle <= 0;
++					state <= STATE_WRITE_START;
++					stage <= READ_STATUS;
++					read_length <= 'd13;
++					write_buffer <= {24'd0, LLAPI_STATUS};
++				end
++			end else if (stage == WRITE_MODES) begin
++				if (cycle > TIME_WAIT) begin
++					cycle <= 0;
++					stage <= READ_MODES;
++					read_length <= 1'd1;
++					state <= STATE_WRITE_START;
++					write_buffer <= {24'd0, LLAPI_GET_MODES};
++				end
++			end else if (repoll_due || (poll_due && !auxiliary)) begin // Let an accepted auxiliary transaction finish or time out.
++				count <= count + 1'b1;
++				if (repoll_due ?
++                    (cycle > TIME_WAIT && data_in) : count > TIME_WAIT) begin
++                    repoll_pending <= 0;
++					if (stage != READ_IDLE) begin // IO timeout, device disconnect/defunct
++						enable <= 1'b0; LINK_FAULT <= 1; LAST_FAULT_REASON <= 2'd1;
++						poll_offset <= 0;
++						poll_time <= poll_offset_latch > TIME_BUFFER ? poll_offset_latch : TIME_POLL;
++						poll_offset_latch <= 21'd350000;
++						lljs_buttons <= 24'h0;
++						lljs_type <= 8'h0;
++						lljs_analog <= 72'h080000808080808080;
++                        lljs_modes <= 0; MODES_VALID <= 0; modes_attempted <= 0;
++					end
++					poll_offset <= 0;
++					sync_counter <= 0;
++					cycle <= 0;
++					count <= 0;
++					read_length <= 0;
++					state <= STATE_WRITE_START;
++                    transaction_timer <= 0; payload_remaining <= 0;
++					stage <= READ_POLL;
++					write_buffer <= {24'd0, LLAPI_POLL};
++				end
++			end
++		end
++
++		STATE_WRITE_START: begin
++			if (cycle == 0) begin
++				data_out <= 1'b0; 
++				latch <= 1'b1; // Take control
++				write_length <= 'h8; // Always 8 for now
++			end else if (cycle >= TIME_LEADIN) begin
++				cycle <= 0;
++				state <= STATE_WRITE;
++			end
++		end
++
++		STATE_WRITE: begin
++			if (write_length == 0) begin
++				state <= STATE_WRITE_END;
++				cycle <= 0;
++			end else if (cycle == 'd0) begin // high half-bit
++				data_out <= 1'b1;
++			end else if (cycle == TIME_BIT_H) begin // data half-bit
++				data_out <= ~write_buffer[0];
++				write_buffer <= write_buffer >> 1;
++			end else if (cycle >= (TIME_BIT_R + TIME_BIT_H)) begin
++				write_length <= write_length - 1'b1;
++				cycle <= 0;
++			end
++		end
++
++		STATE_WRITE_END: begin
++			if (cycle == 0)
++				data_out <= 1'b1;
++			else if (cycle == TIME_SYNC_H)
++				data_out <= 1'b0;
++			else if (cycle == (TIME_SYNC_H + TIME_SYNC_L)) begin
++				latch <= 1'b0; // Release
++			end else if (cycle >= (TIME_SYNC_H + TIME_SYNC_L + TIME_SETTLE)) begin
++				state <= STATE_IDLE;
++                if (command_busy && payload_remaining != 0) begin
++                    payload_remaining <= payload_remaining - 1'b1;
++                    stage <= WRITE_PAYLOAD;
++                end else if (command_busy && read_length == 0) begin
++                    command_busy <= 0; CMD_DONE <= 1; stage <= READ_IDLE;
++                    if (active_opcode == 8'h20) begin modes_attempted <= 0; MODES_VALID <= 0; lljs_modes <= 0; end
++                end
++                cycle <= 0;
++            end
++        end
++
++        STATE_READ_START: begin
++            if (cycle >= ((stage == READ_POLL || raw_active) ? TIME_POLL : RECEIVE_START_TIMEOUT)) begin
++                // Discard this transaction and wait for both input lines to release.
++                // Never repeatedly transmit into a device holding the bus low.
++                state <= STATE_WAIT_RELEASE;
++                stage <= READ_IDLE;
++                cycle <= 0; count <= 0;
++                packet_complete <= 0;
++                latch <= 0; data_out <= 1;
++                enable <= 0; LINK_FAULT <= 1; LAST_FAULT_REASON <= 2'd1;
++                lljs_type <= 0; lljs_modes <= 0; lljs_buttons <= 0;
++                modes_attempted <= 0; MODES_VALID <= 0;
++                lljs_analog <= 72'h080000808080808080;
++            end else if (cycle >= TIME_SETTLE && ~is_latched) begin // Just a busy wait/poll/blip
++				cycle <= 0;
++				if (stage == READ_POLL) begin // Poll processing gets its own budget.
++                    stage <= WRITE_STATUS; transaction_timer <= 0;
++                end
++				state <= STATE_IDLE;
++			end else if (count >= 'd10) begin // Allows for latch to be seen if both are released together
++				cycle <= 'd10;
++				read_bit <= 3'h0;
++				state <= STATE_READ;
++			end else if (cycle >= TIME_LEADIN && data_in) begin // If we get data high it means we're reading
++				count <= count + 1'b1;
++			end
++		end
++
++        STATE_WAIT_RELEASE: begin
++            latch <= 0; data_out <= 1;
++            if (is_latched || !data_in) cycle <= 0;
++            else if (cycle >= TIME_SETTLE) begin
++                state <= STATE_IDLE; stage <= READ_IDLE;
++                cycle <= 0; count <= 0;
++                poll_offset <= 0; poll_offset_latch <= 0;
++                poll_time <= TIME_POLL;
++                sync_counter <= TIME_POLL; poll_counter <= 0;
++            end
++        end
++
++		// Allow the actual byte-sync edge to arrive before falling back.
++		// Ignore early edges belonging to the preceding final data bit.
++		STATE_READ_WAIT: begin // the space between the bytes
++			if (cycle > ((TIME_SYNC_H + TIME_SYNC_L) * 2) ||
++				((cycle > TIME_SYNC_H) && ~old_data && data_in)) begin // Re align during wait if needed
++				cycle <= 0;
++				read_bit <= 3'h0;
++				if (read_byte >= read_length) state <= STATE_READ_END; else state <= STATE_READ;
++			end
++		end
++
++		STATE_READ: begin
++			if (~is_latched) begin // Accounts from random timing errors or unexpected events
++				cycle <= 0;
++				state <= STATE_IDLE;
++			end else if (read_byte >= read_length || read_byte >= 13) begin
++                state <= STATE_READ_END; cycle <= 0;
++            end else if (cycle == (TIME_BIT_H + (TIME_BIT_R >> 1))) begin // latch in the middle of the data window
++				read_buffer[read_byte][read_bit] <= ~data_in;
++				read_bit <= read_bit + 1'b1;
++			end else if (cycle >= TIME_BIT_H + TIME_BIT_R) begin
++				cycle <= 0;
++				if (read_bit == 3'h0) begin // This relies on overflow behavior
++					if (read_byte == 0) begin
++						if (stage == READ_STATUS) begin
++							pending_type <= read_buffer[0];
++						end
++					end else if (read_byte == 'd12 && stage == READ_STATUS) begin
++                        packet_complete <= 1;
++						
++
++						
++					end
++					poll_offset_latch <= poll_offset < (21'h1fffff - TIME_BUFFER) ? poll_offset + TIME_BUFFER : 21'h1fffff;
++					read_byte <= read_byte + 1'd1;
++                    if (!raw_active && read_byte == 0 && stage != READ_MODES && protocol_error(read_buffer[0])) read_length <= 1;
++					state <= STATE_READ_WAIT;
++				end
++			end
++		end
++		/*
++		#define DPAD_UP      0x04    00000100
++		#define DPAD_DOWN    0x08    00001000
++		#define DPAD_LEFT    0x10    00010000  
++		#define DPAD_RIGHT   0x20    00100000
++
++		#define DPAD_UPLEFT        0x14
++		#define DPAD_DOWNLEFT    0x18
++		#define DPAD_UPRIGHT    0x24
++		#define DPAD_DOWNRIGHT    0x28
++		#define DPAD_REST    0xff
++		*/
++
++		STATE_READ_END: begin
++			// latch data to correct registers based on stage
++			if (cycle >= TIME_WAIT) begin // bliss box holds the line low for about 3us after reply
++                packet_complete <= 0;
++                stage <= READ_IDLE;
++                // Publish type, buttons and all axes together after a complete packet.
++                if (stage == READ_STATUS && packet_complete && pending_type != 0 && !protocol_error(pending_type)) begin
++                    STATUS_UPDATE <= 1;
++                    repoll_pending <= IMMEDIATE_REPOLL;
++                    TYPE_CHANGED <= STATUS_VALID && pending_type != lljs_type;
++                    command_slot <= 1;
++                    lljs_type <= pending_type;
++                    lljs_buttons <= pending_buttons;
++                    lljs_analog <= pending_analog;
++                    if (MODES_VALID && pending_type == lljs_type && lljs_modes[7]) begin
++                        lljs_buttons[27] <= pending_buttons[27] | (pending_analog[15:8] < 50);
++                        lljs_buttons[26] <= pending_buttons[26] | (pending_analog[15:8] > 200);
++                        lljs_buttons[25] <= pending_buttons[25] | (pending_analog[7:0] < 50);
++                        lljs_buttons[24] <= pending_buttons[24] | (pending_analog[7:0] > 200);
++                    end
++                    // Both manual and automatic mode reads belong to this controller ID.
++                    if (pending_type != lljs_type || (AUTO_MODES && !modes_attempted)) begin
++                        lljs_modes <= 0; MODES_VALID <= 0;
++                        if (AUTO_MODES) begin
++                            stage <= WRITE_MODES; modes_attempted <= 1; transaction_timer <= 0;
++                        end
++                    end
++                end
++                if (stage == READ_STATUS && ((read_byte == 1 && protocol_error(read_buffer[0])) || (packet_complete && pending_type == 0))) begin
++                    LINK_FAULT <= 1; LAST_FAULT_REASON <= 2'd2; enable <= 0; lljs_type <= 0; lljs_buttons <= 0;
++                    lljs_analog <= 72'h080000808080808080;
++                    lljs_modes <= 0; MODES_VALID <= 0; modes_attempted <= 0;
++                end
++                if ((stage == READ_MODES || (command_busy && active_opcode == 8'h21)) && read_byte == 1) begin
++                    if (!protocol_error(read_buffer[0])) begin
++                        lljs_modes <= read_buffer[0]; MODES_VALID <= 1;
++                    end else begin lljs_modes <= 0; MODES_VALID <= 0; end
++                end
++                if (command_busy) begin
++                    CMD_DONE <= 1; command_busy <= 0;
++                    CMD_REPLY_LENGTH <= read_byte;
++                    for (integer n=0; n<13; n=n+1)
++                        if (n < read_byte) CMD_REPLY[n*8 +: 8] <= read_buffer[n];
++                    if (!raw_active && read_byte == 1 && protocol_error(read_buffer[0])) CMD_ERROR <= read_buffer[0];
++                end
++                cycle <= 0;
++                state <= STATE_IDLE;
++			end
++		end
++
++		default: begin
++			cycle <= 0;
++			count <= 0;
++			stage <= READ_IDLE;
++			state <= STATE_IDLE;
++		end
++    endcase
++    end else begin
++        // ENABLE low resets only this instance; reuse it for per-port rediscovery.
++        // Intentional disable is not a communication fault.
++        STATUS_UPDATE <= 0; TYPE_CHANGED <= 0; LINK_FAULT <= 0; LAST_FAULT_REASON <= 0;
++        // ENABLE low resets transaction/synchronization state deterministically.
++        repoll_pending <= 0;
++        modes_attempted <= 0; MODES_VALID <= 0; command_busy <= 0; command_slot <= 0;
++        raw_selected <= 0; payload_remaining <= 0; active_opcode <= 0; transaction_timer <= 0;
++        CMD_DONE <= 0; CMD_ERROR <= 0; CMD_REPLY <= 0; CMD_REPLY_LENGTH <= 0;
++        pending_type <= 0;   packet_complete <= 0;
++        cycle <= 0; count <= 0; poll_offset <= 0; poll_counter <= 0;
++        poll_offset_latch <= 0; sync_counter <= 0; poll_time <= TIME_POLL;
++        write_buffer <= 0; write_length <= 0;
++        read_bit <= 0; read_byte <= 0; read_length <= 0;
++        is_latched <= 0; data_in <= 1; old_data <= 1; data_out <= 1;
++        old_sync <= 0; new_sync <= 0;
++		latch <= 1'b0;
++		enable <= 1'b0;
++		lljs_analog <= 0;
++		lljs_buttons <= 0;
++		lljs_modes <= 0;
++		lljs_type <= 0;
++		state <= STATE_IDLE;
++		stage <= READ_IDLE;
++	end
++end
++
++// Passive measurements in the same domain as the serial state machine.
++// The optional diagnostic output has no path back into the driver or pins.
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++wire diag_tx_start = state == STATE_WRITE_START && cycle == 0;
++wire diag_busy_done = state == STATE_READ_START && stage == READ_POLL &&
++                      cycle >= TIME_SETTLE && !is_latched;
++wire diag_valid_report = state == STATE_READ_END && cycle >= TIME_WAIT &&
++                         stage == READ_STATUS && packet_complete &&
++                         pending_type != 0 && !protocol_error(pending_type);
++llapi_poll_timing timing (
++    .clk(CLK_50M), .observe(ENABLE && startup_complete && !LINK_FAULT && !watchdog_expired),
++    .poll_start(diag_tx_start && stage == READ_POLL),
++    .busy_release(diag_busy_done), .status_start(diag_tx_start && stage == READ_STATUS),
++    .report(diag_valid_report), .vblank_rise(new_sync && !old_sync),
++    .snapshot(poll_timing_us)
++);
++`else
++assign poll_timing_us = 64'd0;
++`endif
++
++endmodule
++
++
++// MIT compatibility wrapper: keep the existing 1944 bridge unchanged.
++module LLAPI (
++ input REPOLL_OFF, CLK_50M, ENABLE, IO_LATCH_IN, IO_DATA_IN, LLAPI_SYNC,
++ output IO_LATCH_OUT, IO_DATA_OUT, LLAPI_EN,
++ output [7:0] LLAPI_TYPE, LLAPI_MODES,
++ output [31:0] LLAPI_BUTTONS,
++ output [71:0] LLAPI_ANALOG,
++ output STATUS_VALID, STATUS_UPDATE, LINK_FAULT, TYPE_CHANGED,
++ output [1:0] LAST_FAULT_REASON,
++ output [63:0] poll_timing_us
++);
++ LLAPI_Enhanced #(.AUTO_MODES(1), .IMMEDIATE_REPOLL(1), .COMMAND_INTERFACE(0), .ALLOW_MODE_WRITES(0)) enhanced (
++ .CLK_50M(CLK_50M), .ENABLE(ENABLE), .REPOLL_OFF(REPOLL_OFF), .IO_LATCH_IN(IO_LATCH_IN),
++ .IO_DATA_IN(IO_DATA_IN), .LLAPI_SYNC(LLAPI_SYNC),
++ .IO_LATCH_OUT(IO_LATCH_OUT), .IO_DATA_OUT(IO_DATA_OUT),
++ .LLAPI_EN(LLAPI_EN), .LLAPI_TYPE(LLAPI_TYPE), .LLAPI_MODES(LLAPI_MODES),
++ .LLAPI_BUTTONS(LLAPI_BUTTONS), .LLAPI_ANALOG(LLAPI_ANALOG),
++ .CMD_RAW(1'b0), .CMD_TX_LENGTH(5'd0), .CMD_RX_LENGTH(4'd0), .CMD_TX_DATA(192'd0),
++ .CMD_VALID(1'b0), .CMD_OPCODE(8'd0), .CMD_PAYLOAD(16'd0),
++ .STATUS_VALID(STATUS_VALID), .STATUS_UPDATE(STATUS_UPDATE), .LINK_FAULT(LINK_FAULT),
++ .TYPE_CHANGED(TYPE_CHANGED), .LAST_FAULT_REASON(LAST_FAULT_REASON), .poll_timing_us(poll_timing_us),
++ .CMD_READY(), .CMD_DONE(), .CMD_ERROR(), .CMD_REPLY(), .CMD_REPLY_LENGTH()
++ );
++endmodule
++
++// A snapshot holds one complete cycle. Wait for both follow-up events even
++// if a new report arrives before the first vblank. An interrupted measurement
++// is discarded; the most recent complete snapshot survives OSD suspension.
++// Quantization is one microsecond. FFFF is unavailable, FFFE is saturation.
++module llapi_poll_timing(
++    input clk, observe, poll_start, busy_release, status_start, report, vblank_rise,
++    output reg [63:0] snapshot = 64'hffff_ffff_ffff_ffff
++);
++    localparam [2:0] IDLE=0, WAIT_BUSY=1, WAIT_STATUS=2, WAIT_REPORT=3, WAIT_ENDS=4;
++    localparam [15:0] MAX_US=16'hfffe;
++    reg [2:0] phase = IDLE;
++    reg [5:0] divider = 0;
++    reg [15:0] age_us = 0;
++    reg [15:0] poll_us, status_us, next_poll_us, next_vblank_us;
++    reg saw_poll, saw_vblank;
++    wire us_tick = divider == 6'd49;
++    wire [15:0] elapsed = us_tick && age_us < MAX_US ? age_us + 16'd1 : age_us;
++
++    always @(posedge clk) begin
++        if (!observe) begin
++            phase <= IDLE;
++            divider <= 0;
++            age_us <= 0;
++        end else begin
++            divider <= us_tick ? 6'd0 : divider + 6'd1;
++            age_us <= elapsed;
++            case (phase)
++                IDLE: if (poll_start) begin
++                    phase <= WAIT_BUSY;
++                    age_us <= 0;
++                end
++                WAIT_BUSY: if (busy_release) begin
++                    poll_us <= elapsed;
++                    phase <= WAIT_STATUS;
++                    age_us <= 0;
++                end
++                WAIT_STATUS: if (status_start) begin
++                    status_us <= elapsed;
++                    phase <= WAIT_REPORT;
++                end
++                WAIT_REPORT: if (report) begin
++                    phase <= WAIT_ENDS;
++                    age_us <= 0;
++                    saw_poll <= 0;
++                    saw_vblank <= vblank_rise;
++                    next_vblank_us <= 0;
++                end
++                WAIT_ENDS: begin
++                    if (poll_start && !saw_poll) begin
++                        saw_poll <= 1;
++                        next_poll_us <= elapsed;
++                    end
++                    if (vblank_rise && !saw_vblank) begin
++                        saw_vblank <= 1;
++                        next_vblank_us <= elapsed;
++                    end
++                    if ((saw_poll || poll_start) && (saw_vblank || vblank_rise)) begin
++                        snapshot <= {poll_us, status_us, saw_poll ? next_poll_us : elapsed,
++                                     saw_vblank ? next_vblank_us : elapsed};
++                        phase <= poll_start ? WAIT_BUSY : IDLE;
++                        age_us <= 0;
++                    end
++                end
++                default: phase <= IDLE;
++            endcase
++        end
++    end
++endmodule
+diff --git a/enhanced/jtframe_serial_arcade.sv b/enhanced/jtframe_serial_arcade.sv
+new file mode 100644
+index 0000000..2bab4bb
+--- /dev/null
++++ b/enhanced/jtframe_serial_arcade.sv
+@@ -0,0 +1,373 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Optional digital SNAC readers for the 1943 LLAPI pilot.
++// USER pin assignments follow MiSTer-devel SNES, Genesis and Saturn cores.
++// Saturn nibble order also checked against Timothy Redaelli's joydb9saturn
++// reader in MiSTer-DB9/jtcores; this is a single-port SNAC implementation.
++module jtframe_serial_arcade #(parameter BUTTONS=3)(
++    input clk_50,clk_sys,rst,vblank,osd_active,repoll_off,
++    input autofire_enable,autofire_toggle,
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    input autofire_enable2,autofire_toggle2,
++    input [1:0] autofire_rate1,autofire_rate2,
++    input loss_resume,
++    output loss_paused,
++    output [1:0] loss_players,
++    output [1:0] loss_countdown,
++    input info_clk,
++    output [19:0] controller_info,
++    output [7:0] link_diagnostics,
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++    output [63:0] poll_timing_us,
++`endif
++    output [3:0] last_fault_reason,
++`endif
++    input [2:0] mode, // 0 LLAPI, 1 Saturn, 2 SEGA, 3 original DB15, 4 SNES, 5 PCE 2-button, 6 NES
++    input [6:0] user_in,
++    output [6:0] user_out,
++    input [15:0] usb1,usb2,
++    output [15:0] joy1,joy2,
++    output [3:0] start,coin,
++    output db15_drive,
++    output osd_request
++);
++    (* async_reg="true" *) reg [2:0] mode_meta=0,mode50=0;
++    reg [2:0] previous_mode=0;
++    reg [12:0] settle=7500;
++    wire ready50=(settle==0) && mode50==previous_mode;
++    always @(posedge clk_50) begin
++        mode_meta<=mode; mode50<=mode_meta;
++        previous_mode<=mode50;
++        if(mode50!=previous_mode) settle<=13'd7500; // 150 us released
++        else if(settle!=0) settle<=settle-1'b1;
++    end
++    wire [6:0] llapi_out,snac_out;
++    wire [15:0] llapi_joy1,llapi_joy2;
++    wire [3:0] llapi_start,llapi_coin;
++    wire llapi_osd;
++    wire [1:0] llapi_af,snac_af,llapi_connected;
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    wire [1:0] llapi_type_changed;
++`endif
++    jtframe_llapi_arcade #(.BUTTONS(BUTTONS)) u_llapi(.repoll_off(repoll_off),
++        .clk_50(clk_50),.clk_sys(clk_sys),.rst(rst),.vblank(vblank),
++        .enable(ready50 && mode50==0),.osd_active(osd_active),
++        .user_in(user_in),.user_out(llapi_out),.usb1(usb1),.usb2(usb2),
++        .joy1(llapi_joy1),.joy2(llapi_joy2),.start(llapi_start),
++        .coin(llapi_coin),.osd_request(llapi_osd),.autofire_hold(llapi_af),.connected(llapi_connected)
++`ifdef JTFRAME_ENHANCED_CONTROLS
++        ,.loss_resume(loss_resume),.loss_paused(loss_paused),.loss_countdown(loss_countdown),.loss_players(loss_players),.info_clk(info_clk),.controller_info(controller_info),.link_diagnostics(link_diagnostics)
++`ifdef JTFRAME_LLAPI_POLL_DIAG
++        ,.poll_timing_us(poll_timing_us)
++`endif
++        ,.last_fault_reason(last_fault_reason),.type_changed(llapi_type_changed)
++`endif
++    );
++    wire [8:0] snac_pad,snac_pad2;
++    wire [2:0] reader_mode=mode50==1 ? 3 : mode50==2 ? 2 : mode50==4 ? 1 : mode50==5 ? 4 : mode50==6 ? 5 : 0;
++    jtframe_snac_arcade #(.BUTTONS(BUTTONS)) u_snac(.clk_50(clk_50),
++        .enable(ready50 && reader_mode!=0),.mode(reader_mode),
++        .user_in(user_in),.user_out(snac_out),.pad(snac_pad),.pad2(snac_pad2),.autofire_hold(snac_af));
++    // Only one mux drives the physical connector. Inactive readers cannot
++    // drive pins, and all pins are released while changing protocol.
++    assign db15_drive=ready50 && mode50==3;
++    wire db_clk,db_load;
++    wire [15:0] db1,db2;
++    // Preserve Jotego's original Antonio Villena DB15 splitter reader.
++    joy_db15 u_db15(.clk(clk_50),.JOY_CLK(db_clk),.JOY_LOAD(db_load),
++        .JOY_DATA(user_in[5]),.joystick1(db1),.joystick2(db2));
++    wire [8:0] port1=mode50==3 ? {db1[11:10],db1[6:0]} : snac_pad;
++    wire [8:0] port2=mode50==3 ? {db2[11:10],db2[6:0]} : (mode50==4 || mode50==6) ? snac_pad2 : 9'd0;
++    assign user_out=!ready50 ? 7'h7f : mode50==0 ? llapi_out :
++                    mode50==3 ? {5'h1f,db_clk,db_load} : snac_out;
++    (* async_reg="true" *) reg [8:0] pad_meta=0,pad_sys=0,pad2_meta=0,pad2_sys=0;
++    (* async_reg="true" *) reg [2:0] active_meta=0,active_sys=0;
++    (* async_reg="true" *) reg ready_meta=0,ready_sys=0;
++    always @(posedge clk_sys) begin
++        pad_meta<=port1; pad_sys<=pad_meta;
++        pad2_meta<=port2; pad2_sys<=pad2_meta;
++        active_meta<=mode50; active_sys<=active_meta;
++        ready_meta<=ready50; ready_sys<=ready_meta;
++    end
++    wire stable=ready_sys && active_sys==mode;
++    wire snac_selected=stable && active_sys!=0 && active_sys<=6;
++    wire db15_selected=stable && active_sys==3;
++    wire dual_snac=stable && (active_sys==3 || active_sys==4 || active_sys==6);
++    wire snac_menu=snac_selected && (db15_selected ?
++        ((pad_sys[7] && pad_sys[6]) || (pad2_sys[7] && pad2_sys[6])) :
++        ((pad_sys[2] && pad_sys[7] && pad_sys[4]) ||
++         ((active_sys==4 || active_sys==6) && pad2_sys[2] && pad2_sys[7] && pad2_sys[4])));
++    wire inhibit=osd_active || snac_menu;
++    wire [15:0] raw_joy1,raw_joy2;
++    assign raw_joy1=!stable ? usb1 : !snac_selected ? llapi_joy1 :
++                 inhibit ? 16'd0 : {9'd0,pad_sys[6:0]};
++    assign raw_joy2=!stable ? usb2 : dual_snac ?
++                 (inhibit ? 16'd0 : {9'd0,pad2_sys[6:0]}) :
++                 snac_selected ? usb1 : llapi_joy2;
++`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
++    (* async_reg="true" *) reg [1:0] snac_af_meta=0,snac_af_sys=0;
++    (* async_reg="true" *) reg vb_meta=0,vb_sync=0;
++    always @(posedge clk_sys) begin
++        snac_af_meta<=snac_af;snac_af_sys<=snac_af_meta;
++        vb_meta<=vblank;vb_sync<=vb_meta;
++    end
++    wire [1:0] db_af={db2[7],db1[7]};
++    (* async_reg="true" *) reg [1:0] db_af_meta=0,db_af_sys=0;
++    always @(posedge clk_sys) begin db_af_meta<=db_af;db_af_sys<=db_af_meta;end
++    // Two-button SNAC pads have no spare autofire control. Never consume manual fire.
++    wire autofire_available=active_sys==0 || active_sys==2 || active_sys==3 || active_sys==4 || active_sys==1;
++    wire effective_autofire=autofire_enable && autofire_available;
++    wire [1:0] held=stable && !inhibit ?
++        (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && BUTTONS!=2)) ? snac_af_sys : active_sys==1 && BUTTONS==2 ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
++    wire fire1,fire2;
++`ifdef JTFRAME_ENHANCED_CONTROLS
++    wire [1:0] clear_af={2{!stable}} | ({2{active_sys==0}} & (~llapi_connected | llapi_type_changed));
++    enhanced_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,
++        effective_autofire,autofire_toggle,clear_af[0],autofire_rate1,fire1);
++    enhanced_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,
++        autofire_enable2 && autofire_available,autofire_toggle2,clear_af[1],autofire_rate2,fire2);
++`else
++    selectable_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[0]),fire1);
++    selectable_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[1]),fire2);
++`endif
++    assign joy1={raw_joy1[15:5],fire1,raw_joy1[3:0]};
++    assign joy2={raw_joy2[15:5],fire2,raw_joy2[3:0]};
++`else
++    assign joy1=raw_joy1;assign joy2=raw_joy2;
++`endif
++    assign start=!stable ? 4'd0 : !snac_selected ? llapi_start :
++                 {2'd0,dual_snac && pad2_sys[7] && !inhibit,
++                  pad_sys[7] && (!pad_sys[8] || db15_selected) && !inhibit};
++    assign coin=!stable ? 4'd0 : !snac_selected ? llapi_coin :
++                 {2'd0,dual_snac && pad2_sys[8] && !inhibit,pad_sys[8] && !inhibit};
++    assign osd_request=stable && (snac_selected ? snac_menu : llapi_osd);
++endmodule
++
++module jtframe_snac_arcade #(
++    parameter BUTTONS=3,
++    parameter TICK_CYCLES=500, // 10 us at 50 MHz; shortened only in simulation
++    parameter SCAN_TICKS=250  // 2.5 ms; allows MD six-button timeout to reset
++)(
++    input clk_50,enable,
++    input [2:0] mode, // 1 SNES, 2 Mega Drive, 3 Saturn digital, 4 PCE, 5 NES
++    input [6:0] user_in,
++    output reg [6:0] user_out=7'h7f,
++    // [8] coin, [7] start, [6:4] buttons, [3:0] UDLR, active high
++    output reg [1:0] autofire_hold=0,
++    output reg [8:0] pad=0,pad2=0
++);
++    (* async_reg="true" *) reg [6:0] input_meta=7'h7f,input_sync=7'h7f;
++    always @(posedge clk_50) begin input_meta<=user_in; input_sync<=input_meta; end
++    localparam TICK_WIDTH=TICK_CYCLES<2 ? 1 : $clog2(TICK_CYCLES);
++    reg [TICK_WIDTH-1:0] ticks=0;
++    reg [10:0] phase=0;
++    reg [2:0] old_mode=0;
++    reg [7:0] nes=8'hff,nes2=8'hff;
++    reg [3:0] pce_dir=4'hf,pce_buttons=4'hf;
++    // About 60 Hz CLR cadence preserves the purpose of physical PCE turbo switches.
++    localparam PCE_SCAN_TICKS=1667;
++    reg [15:0] snes=16'hffff,snes2=16'hffff;
++    reg [5:0] md_high=6'h3f;
++    reg [1:0] md_as=2'b11;
++    reg md_valid=0,md_six=0;
++    reg [3:0] md_extra=4'hf;
++    reg [3:0] sat_extra=4'hf,sat_main=4'hf,sat_dir=4'hf;
++    wire [5:0] md_in={input_sync[6],input_sync[2],input_sync[3],input_sync[5],input_sync[0],input_sync[1]}; // C B R L D U
++    wire [3:0] sat_in={input_sync[3],input_sync[5],input_sync[0],input_sync[1]}; // D3..D0
++    always @(posedge clk_50) begin
++        old_mode<=mode;
++        if(!enable || mode==0 || mode>5 || mode!=old_mode) begin
++            autofire_hold<=0; ticks<=0; phase<=0; user_out<=7'h7f; pad<=0; pad2<=0;
++            nes<=8'hff;nes2<=8'hff;pce_dir<=4'hf;pce_buttons<=4'hf;
++            snes<=16'hffff; snes2<=16'hffff; md_valid<=0; md_six<=0;
++            md_high<=6'h3f; md_as<=2'b11; md_extra<=4'hf;
++            sat_extra<=4'hf; sat_main<=4'hf; sat_dir<=4'hf;
++        end else if(ticks==TICK_CYCLES-1) begin
++            ticks<=0;
++            phase<=phase==(mode==4 ? PCE_SCAN_TICKS-1 : SCAN_TICKS-1) ? 0 : phase+1'b1;
++            case(mode)
++                4: begin
++                    // MiSTer-devel TG16: SEL=USER2, CLR=USER4,
++                    // D0..D3=USER1,0,5,3. Two-button direct adapter only.
++                    case(phase)
++                        0: begin user_out<=7'h7f; autofire_hold<=0;pad2<=0; end
++                        1: user_out[4]<=0; // release CLR; SEL high selects U,R,D,L
++                        2: begin pce_dir<=sat_in;user_out[2]<=0;end
++                        3: pce_buttons<=sat_in; // SEL low selects I,II,Select,Run
++                        4: pad<={~pce_buttons[2],~pce_buttons[3],1'b0,
++                                  ~pce_buttons[1],~pce_buttons[0],
++                                  ~pce_dir[0],~pce_dir[2],~pce_dir[3],~pce_dir[1]};
++                    endcase
++                end
++                5: begin
++                    // NES: latch USER0; P1 clock/data USER1/5, P2 USER3/6.
++                    // Sample the current bit while clock low, then advance on rising edge.
++                    if(phase==0) begin user_out<=7'h75;nes<=8'hff;nes2<=8'hff;autofire_hold<=0;end
++                    if(phase==1) user_out[0]<=0;
++                    if(phase>=2 && phase<=16 && !phase[0]) begin
++                        nes[(phase-2)>>1]<=input_sync[5];
++                        nes2[(phase-2)>>1]<=input_sync[6];
++                        user_out[1]<=1;user_out[3]<=1;
++                    end
++                    if(phase>=3 && phase<=17 && phase[0]) begin user_out[1]<=0;user_out[3]<=0;end
++                    if(phase==18) begin
++                        pad<={~nes[2],~nes[3],1'b0,~nes[1],~nes[0],~nes[4],~nes[5],~nes[6],~nes[7]};
++                        pad2<={~nes2[2],~nes2[3],1'b0,~nes2[1],~nes2[0],~nes2[4],~nes2[5],~nes2[6],~nes2[7]};
++                    end
++                end
++                1: begin
++                    // Official SNES dual-port SNAC: shared latch USER0,
++                    // P1 clock/data USER1/5, P2 clock/data USER3/6.
++                    // Sample before each falling edge; controller advances
++                    // on that edge, leaving a full period for the next bit.
++                    if(phase==0 || phase==1) begin user_out<=7'h7f; snes<=16'hffff; snes2<=16'hffff; end
++                    if(phase==2) user_out[0]<=0;
++                    if(phase>=3 && phase<=33 && phase[0]) begin
++                        snes[(phase-3)>>1]<=input_sync[5];
++                        snes2[(phase-3)>>1]<=input_sync[6];
++                        user_out[1]<=0; user_out[3]<=0;
++                    end
++                    if(phase>=4 && phase<=34 && !phase[0]) begin user_out[1]<=1; user_out[3]<=1; end
++                    if(phase==35) begin
++                        autofire_hold<={(snes2[15:12]==4'hf)&&!snes2[9],(snes[15:12]==4'hf)&&!snes[9]};
++                        if(snes[15:12]==4'hf)
++                            pad<={~snes[2],~snes[3],~snes[1],~snes[8],~snes[0],~snes[4],~snes[5],~snes[6],~snes[7]};
++                        else pad<=0;
++                        if(snes2[15:12]==4'hf)
++                            pad2<={~snes2[2],~snes2[3],~snes2[1],~snes2[8],~snes2[0],~snes2[4],~snes2[5],~snes2[6],~snes2[7]};
++                        else pad2<=0;
++                    end
++                end
++                2: begin
++                    // Mega Drive: TH=USER4. Other pins remain released inputs.
++                    case(phase)
++                        0: begin user_out<=7'h6f; md_six<=0; md_extra<=4'hf; end
++                        1: user_out[4]<=1;
++                        2: begin md_high<=md_in; user_out[4]<=0; end
++                        3: begin md_as<=md_in[5:4]; md_valid<=(md_in[3:2]==0); user_out[4]<=1; end
++                        4: user_out[4]<=0;
++                        5: begin md_six<=(md_in[3:0]==0); user_out[4]<=1; end
++                        6: begin md_extra<=md_in[3:0]; user_out[4]<=0; end
++                        7: begin
++                            user_out[4]<=1;
++                            // MD6 X is separate from ABC/Mode/Start and only
++                            // valid after the extension handshake; MD3 has no X.
++                            autofire_hold<={1'b0,md_valid && (md_six ? !md_extra[2] : BUTTONS==2 && !md_high[5])};
++                            if(md_valid) begin
++                                pad[3:0]<=~{md_high[0],md_high[1],md_high[2],md_high[3]};
++                                pad[6:4]<=~{md_high[5],md_as[0],md_high[4]}; // C,A,B => buttons 3,2,1
++                                pad[7]<=~md_as[1];
++                                // Mode on a 6-button pad; Down+Start also
++                                // works on a 3-button pad (consumes Start).
++                                pad[8]<=(md_six && !md_extra[3]) || (!md_high[1] && !md_as[1]);
++                            end else pad<=0;
++                        end
++                    endcase
++                end
++                3: begin
++                    // Saturn digital: TH=USER4, TR=USER6; D3..0 use
++                    // USER3,5,0,1. TL/USER2 is released (input).
++                    case(phase)
++                        0: user_out<=7'h2f; // TH=0, TR=0
++                        1: begin sat_extra<=sat_in; user_out[4]<=1; end
++                        2: begin sat_main<=sat_in; user_out[4]<=0; user_out[6]<=1; end
++                        3: begin sat_dir<=sat_in; user_out[4]<=1; end
++                        4: begin
++                            // Digital pad ID: final phase is {L,1,0,0}.
++                            // Reject an analog-handshake pad instead of
++                            // retaining stale data or inventing button presses.
++                            // Extra nibble is {R,X,Y,Z}; X is unused by game actions.
++                            autofire_hold <= {1'b0, sat_in[2:0]==3'b100 && !sat_extra[2]};
++                            if(sat_in[2:0]==3'b100) begin
++                                pad[3:0]<=~{sat_dir[0],sat_dir[1],sat_dir[2],sat_dir[3]};
++                                pad[6:4]<=~{sat_main[2],sat_main[1],sat_main[0]}; // A,C,B
++                                pad[7]<=~sat_main[3];
++                                pad[8]<=~sat_in[3]; // L inserts coin
++                            end else pad<=0;
++                        end
++                    endcase
++                end
++            endcase
++        end else ticks<=ticks+1'b1;
++    end
++endmodule
++
++
++`ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Frame-based hold-to-fire pulse generator; map the physical button upstream.
++module hold_autofire #(parameter HALF_PERIOD_FRAMES=3)(
++ input clk,rst,frame,hold_button,manual_fire,inhibit,
++ output fire
++);
++localparam CW=HALF_PERIOD_FRAMES<2 ? 1 : $clog2(HALF_PERIOD_FRAMES);
++reg [CW-1:0] count=0;
++reg phase=1,previous_frame=0;
++always @(posedge clk) begin
++ previous_frame<=frame;
++ if(rst || inhibit || !hold_button) begin count<=0;phase<=1;end
++ else if(frame && !previous_frame) begin
++  if(count==HALF_PERIOD_FRAMES-1) begin count<=0;phase<=~phase;end
++  else count<=count+1'b1;
++ end
++end
++assign fire=!rst && !inhibit && (manual_fire || (hold_button && phase));
++endmodule
++
++`endif
++
++// Configurable autofire. Settings/OSD/interface changes clear the latch.
++// A button held during a clear must be released before it can toggle again.
++module selectable_autofire #(parameter HALF_PERIOD_FRAMES=3)(
++ input clk,rst,frame,button,manual_fire,inhibit,enable,toggle_mode,clear,
++ output fire
++);
++reg latched=0,previous_button=0,armed=0,previous_enable=0,previous_mode=0;
++wire config_change=(enable!=previous_enable)||(toggle_mode!=previous_mode);
++wire cancel=rst||inhibit||clear||!enable||config_change;
++always @(posedge clk) begin
++ previous_enable<=enable;previous_mode<=toggle_mode;previous_button<=button;
++ if(cancel) begin latched<=0;armed<=0;end
++ else begin
++  if(!button) armed<=1;
++  if(toggle_mode && armed && button && !previous_button) latched<=~latched;
++ end
++end
++wire active=enable && !clear && !config_change && (toggle_mode ? latched : button);
++hold_autofire #(.HALF_PERIOD_FRAMES(HALF_PERIOD_FRAMES)) pulse(clk,rst,frame,active,manual_fire,inhibit,fire);
++endmodule
++
++`ifdef JTFRAME_ENHANCED_CONTROLS
++// SPDX-License-Identifier: GPL-3.0-or-later
++// UltimateMiSTer integration: independent, frame-paced player autofire.
++// rate: 0 = 6-frame period, 1 = 12-frame period, 2 = 4-frame period.
++// Reserved rate 3 uses the default period. No physical Hz claim is made.
++module enhanced_autofire(
++ input clk,rst,frame,button,manual_fire,inhibit,enable,toggle_mode,clear,
++ input [1:0] rate,
++ output fire
++);
++reg previous_frame=0,previous_button=0,previous_enable=0,previous_mode=0;
++reg [1:0] previous_rate=0;
++reg latched=0,armed=0,phase=1;
++reg [2:0] count=0;
++wire config_change=enable!=previous_enable || toggle_mode!=previous_mode || rate!=previous_rate;
++wire cancel=rst || inhibit || clear || !enable || config_change;
++wire active=!cancel && armed && (toggle_mode ? latched : button);
++wire [2:0] last_count=rate==1 ? 3'd5 : rate==2 ? 3'd1 : 3'd2;
++always @(posedge clk) begin
++ previous_frame<=frame; previous_button<=button;
++ previous_enable<=enable; previous_mode<=toggle_mode; previous_rate<=rate;
++ if(cancel) begin latched<=0;armed<=0; end
++ else begin
++  if(!button) armed<=1;
++  if(toggle_mode && armed && button && !previous_button) latched<=~latched;
++ end
++ if(!active) begin count<=0;phase<=1;end
++ else if(frame && !previous_frame) begin
++  if(count==last_count) begin count<=0;phase<=~phase;end
++  else count<=count+1'b1;
++ end
++end
++assign fire=!rst && !inhibit && (manual_fire || (active && phase));
++endmodule
++`endif
+diff --git a/sys/hps_io.sv b/sys/hps_io.sv
+index ebe2058..55d5b84 100644
+--- a/sys/hps_io.sv
++++ b/sys/hps_io.sv
+@@ -38,6 +38,7 @@
+ //
+ module hps_io #(parameter CONF_STR, CONF_STR_BRAM=0, PS2DIV=0, WIDE=0, VDNUM=1, BLKSZ=2, PS2WE=0, STRLEN=$size(CONF_STR)>>3, F12KEYMOD=0, FFB=0)
+ (
++	input [19:0] enhanced_info,
+ 	input             clk_sys,
+ 	inout      [45:0] HPS_BUS,
+ 
+@@ -268,7 +269,8 @@ video_calc video_calc
+ 
+ localparam MAX_W = $clog2((64 > (STRLEN+2)) ? 64 : (STRLEN+2))-1;
+ 
+-wire [7:0] conf_byte;
++wire [7:0] conf_byte, enhanced_menu_byte;
++enhanced_info_byte render_menu(conf_byte, enhanced_info, enhanced_menu_byte, status[89:87], 8'd0, 2'd0, 4'd0);
+ generate
+ 	if(CONF_STR_BRAM) begin
+ 		confstr_rom #(CONF_STR, STRLEN) confstr_rom(.*, .conf_addr(byte_cnt - 1'd1));
+@@ -432,7 +434,7 @@ always@(posedge clk_sys) begin : uio_block
+ 						end
+ 
+ 				// reading config string, returning a byte from string
+-				'h14: if(byte_cnt <= STRLEN) io_dout[7:0] <= conf_byte;
++				'h14: if(byte_cnt <= STRLEN) io_dout[7:0] <= enhanced_menu_byte;
+ 
+ 				// reading sd card status
+ 				'h16: if(!byte_cnt[MAX_W:2]) begin
