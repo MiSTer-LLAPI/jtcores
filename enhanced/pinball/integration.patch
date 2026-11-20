@@ -1,8 +1,31 @@
 diff --git a/PinballAction.qsf b/PinballAction.qsf
-index 00104cc..e5f4f12 100644
+index 00104cc..3028114 100644
 --- a/PinballAction.qsf
 +++ b/PinballAction.qsf
-@@ -53,13 +53,6 @@ source sys/sys.tcl
+@@ -3,7 +3,6 @@
+ # MiSTer project - Pinball Action
+ # --------------------------------------------------------------------------
+ 
+-set_global_assignment -name SEED 4
+ set_global_assignment -name TOP_LEVEL_ENTITY sys_top
+ set_global_assignment -name VERILOG_MACRO "MISTER_FB=1"
+ 
+@@ -28,14 +27,12 @@ set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS OFF
+ set_global_assignment -name OPTIMIZE_POWER_DURING_FITTING OFF
+ # set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
+ set_global_assignment -name FITTER_EFFORT FAST_FIT
+-set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE AREA"
+ set_global_assignment -name ALLOW_POWER_UP_DONT_CARE ON
+ set_global_assignment -name QII_AUTO_PACKED_REGISTERS NORMAL
+ set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
+ # set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+ # set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+ # set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
+-set_global_assignment -name OPTIMIZATION_TECHNIQUE AREA
+ set_global_assignment -name MUX_RESTRUCTURE ON
+ set_global_assignment -name REMOVE_REDUNDANT_LOGIC_CELLS ON
+ set_global_assignment -name AUTO_DELAY_CHAINS_FOR_HIGH_FANOUT_INPUT_PINS ON
+@@ -53,13 +50,6 @@ source sys/sys.tcl
  source sys/sys_analog.tcl
  source files.qip
  
@@ -16,7 +39,7 @@ index 00104cc..e5f4f12 100644
  
  set_global_assignment -name ENABLE_SIGNALTAP OFF
  # set_global_assignment -name USE_SIGNALTAP_FILE pbaction_stp.stp
-@@ -78,4 +71,11 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_bg.v
+@@ -78,4 +68,12 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_bg.v
  set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_sprites.v
  set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_palette.v
  set_global_assignment -name VERILOG_FILE rtl/dpram.v
@@ -30,6 +53,7 @@ index 00104cc..e5f4f12 100644
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_arcade.sv
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_protocol.sv
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_serial_arcade.sv
++set_global_assignment -name SEED 2
 diff --git a/PinballAction.sv b/PinballAction.sv
 index b2374e5..f864fa3 100644
 --- a/PinballAction.sv
