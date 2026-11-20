@@ -1,0 +1,27 @@
+diff --git a/cores/trojan/hdl/jttrojan_game.v b/cores/trojan/hdl/jttrojan_game.v
+index 591083c18..e5ec207ef 100644
+--- a/cores/trojan/hdl/jttrojan_game.v
++++ b/cores/trojan/hdl/jttrojan_game.v
+@@ -35,6 +35,11 @@ always @(posedge clk) begin
+     rst_mcu <= rst24 | ~mcu_en;
+ end
+ 
++// Cabinet inputs are active low. Up can also press Jump on Trojan.
++wire up_jumps = trojan && !avengers && status[13];
++wire [5:0] cabinet_p1 = {joystick1[5] & ~(up_jumps & ~joystick1[3]), joystick1[4:0]};
++wire [5:0] cabinet_p2 = {joystick2[5] & ~(up_jumps & ~joystick2[3]), joystick2[4:0]};
++
+ jttrojan_main u_main(
+     .rst        ( rst           ),
+     .clk        ( clk           ),
+@@ -90,8 +95,8 @@ jttrojan_main u_main(
+     .cab_1p     ( cab_1p[1:0]   ),
+     .coin       ( coin[1:0]     ),
+     .service    ( service       ),
+-    .joystick1  ( joystick1[5:0]),
+-    .joystick2  ( joystick2[5:0]),
++    .joystick1  ( cabinet_p1   ),
++    .joystick2  ( cabinet_p2   ),
+ 
+     .RnW        ( RnW           ),
+     // PROM 6L (interrupts)
