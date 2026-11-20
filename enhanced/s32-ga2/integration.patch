@@ -22,7 +22,7 @@ index d3ceece..abeca63 100644
  # also miss; if a source change leaves either slightly negative, try another
  # seed.
 -set_global_assignment -name SEED 3
-+set_global_assignment -name SEED 7
++set_global_assignment -name SEED 8
  
  # This tree is the release configuration of the core: the sources carry no
  # configuration switches, so no core VERILOG_MACRO is needed here. The lines
