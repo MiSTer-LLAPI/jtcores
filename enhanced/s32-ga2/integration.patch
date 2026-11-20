@@ -1,5 +1,5 @@
 diff --git a/S32.qsf b/S32.qsf
-index d3ceece..68b8743 100644
+index d3ceece..65e031e 100644
 --- a/S32.qsf
 +++ b/S32.qsf
 @@ -42,7 +42,7 @@ set_global_assignment -name ALLOW_POWER_UP_DONT_CARE ON
@@ -20,14 +20,12 @@ index d3ceece..68b8743 100644
  # The release bitstream was fitted with seed 7. The worst path on this design
  # is usually in the framework's HDMI scaler (ascal), though the core clock can
  # also miss; if a source change leaves either slightly negative, try another
-@@ -138,3 +138,13 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
+@@ -138,3 +138,11 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_logsin:u_logsin"
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym1|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
 +
 +set_global_assignment -name VERILOG_MACRO "JTFRAME_ENHANCED_CONTROLS=1"
-+set_global_assignment -name VERILOG_MACRO "JTFRAME_LLAPI_HOLD_AUTOFIRE=1"
-+set_global_assignment -name VERILOG_MACRO "JTFRAME_LLAPI_AUTOFIRE_OPTIONS=1"
 +set_global_assignment -name VERILOG_MACRO "JTFRAME_SNAC_PCE_NES=1"
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/controller_text.sv
 +set_global_assignment -name VERILOG_FILE enhanced/joydb15.v
@@ -35,7 +33,7 @@ index d3ceece..68b8743 100644
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_protocol.sv
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_serial_arcade.sv
 diff --git a/S32.sv b/S32.sv
-index 0ca7c3d..8727ffd 100644
+index 0ca7c3d..d333e60 100644
 --- a/S32.sv
 +++ b/S32.sv
 @@ -27,7 +27,7 @@ module emu
@@ -57,7 +55,7 @@ index 0ca7c3d..8727ffd 100644
  
  //////////////////////////////////////////////////////////////////
  
-@@ -95,6 +96,17 @@ localparam CONF_STR = {
+@@ -95,6 +96,15 @@ localparam CONF_STR = {
  	"O[10],Service,Off,On;",
  	"H2O[55:54],Stick aim,Absolute,Relative slow,Relative medium,Relative fast;",
  	"-;",
@@ -68,23 +66,23 @@ index 0ca7c3d..8727ffd 100644
 +	"H0P3-,TYPE: AUTO CONTROLLER ID;",
 +	"H0P3-,LLAPI Driver: 0.5.0;",
 +	"H0P3O[90],Immediate Repoll,On,Off;",
-+	"P3O[91],P1 Autofire,Off,On;",
-+	"P3O[92],P2 Autofire,Off,On;",
 +	"H0P3-,P1: ", 8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09, 8'h0a, 8'h0b, 8'h0c, 8'h0d, 8'h0e, 8'h0f, ";",
 +	"H0P3-,P2: ", 8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18, 8'h19, 8'h1a, 8'h1b, 8'h1c, 8'h1d, 8'h1e, 8'h1f, ";",
  	"T[0],Reset;",
  	"J1,Attack,Jump,Magic,Start,Coin,Service,Test,Button 4,Button 5,Button 6;",
  	"jn,A,B,X,Start,R,L,Select;",
-@@ -128,6 +140,8 @@ wire        ioctl_wait;
+@@ -128,7 +138,9 @@ wire        ioctl_wait;
  wire        ioctl_upload;
  wire  [7:0] ioctl_din;
  
+-hps_io #(.CONF_STR(CONF_STR)) hps_io
 +wire [31:0] usb0, usb1;
 +wire [19:0] controller_info;
- hps_io #(.CONF_STR(CONF_STR)) hps_io
++hps_io #(.CONF_STR(CONF_STR), .CONF_STR_BRAM(1)) hps_io
  (
  	.clk_sys(clk_sys),
-@@ -139,7 +153,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
+ 	.HPS_BUS(HPS_BUS),
+@@ -139,7 +151,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
  
  	.buttons(buttons),
  	.status(status),
@@ -94,7 +92,7 @@ index 0ca7c3d..8727ffd 100644
  
  	.ioctl_download(ioctl_download),
  	.ioctl_index(ioctl_index),
-@@ -153,8 +168,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
+@@ -153,8 +166,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
  	.ioctl_din(ioctl_din),
  	.ioctl_rd(),
  
@@ -105,7 +103,7 @@ index 0ca7c3d..8727ffd 100644
  	.joystick_2(joystick_2),
  	.joystick_3(joystick_3),
  	.joystick_l_analog_0(stick_0),
-@@ -1075,4 +1090,21 @@ video_freak video_freak
+@@ -1075,4 +1088,26 @@ video_freak video_freak
  assign AUDIO_L = audio_l;
  assign AUDIO_R = audio_r;
  
@@ -117,113 +115,154 @@ index 0ca7c3d..8727ffd 100644
 +    .osd_active(OSD_STATUS), .repoll_off(status[90]), .mode(status[89:87]),
 +    .user_in(USER_IN), .user_out(USER_OUT), .usb1(usb0[15:0]), .usb2(usb1[15:0]),
 +    .joy1(direct0), .joy2(direct1), .start(serial_start), .coin(serial_coin),
-+    .autofire_enable(status[91]), .autofire_enable2(status[92]),
++    .autofire_enable(1'b0), .autofire_enable2(1'b0),
 +    .autofire_toggle(1'b0), .autofire_toggle2(1'b0),
 +    .autofire_rate1(2'd0), .autofire_rate2(2'd0),
 +    .loss_resume(1'b0), .loss_paused(), .loss_players(), .loss_countdown(),
 +    .info_clk(clk_sys), .controller_info(controller_info), .link_diagnostics(),
 +    .last_fault_reason(), .db15_drive(), .osd_request(serial_menu)
 +);
-+assign joystick_0 = {usb0[31:16],direct0[15:9],direct0[8]|serial_coin[0],direct0[7]|serial_start[0],direct0[6:0]};
-+assign joystick_1 = {usb1[31:16],direct1[15:9],direct1[8]|serial_coin[1],direct1[7]|serial_start[1],direct1[6:0]};
++// Service and Test are cabinet switches. Keep them on their original HPS
++// inputs even when a serial controller occupies the player's game slot.
++// Bits 8:7 of each direct pad carry Coin/Start only for its USB fallback.
++assign joystick_0 = {usb0[31:16], direct0[15:11], usb0[10:9],
++                     direct0[8] | serial_coin[0], direct0[7] | serial_start[0], direct0[6:0]};
++assign joystick_1 = {usb1[31:16], direct1[15:11], usb1[10:9],
++                     direct1[8] | serial_coin[1], direct1[7] | serial_start[1], direct1[6:0]};
  endmodule
 diff --git a/enhanced/controller_text.sv b/enhanced/controller_text.sv
 new file mode 100644
-index 0000000..c6d5e3d
+index 0000000..bbe528b
 --- /dev/null
 +++ b/enhanced/controller_text.sv
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,197 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +module controller_info_text(
-+ input [9:0] port_info,
++ input clk_sys,
++ input [19:0] info,
++ input port_b,
 + input [3:0] index,
-+ output reg [7:0] character
++ output [7:0] character
 +);
-+reg [119:0] line;
-+reg [119:0] name;
-+always @* begin
-+ case(port_info[7:0])
-+  8'd1:name="COLECO         ";
-+  8'd2:name="GX4000         ";
-+  8'd3:name="SATURN         ";
-+  8'd4:name="ATARI7800      ";
-+  8'd5:name="VECTREX        ";
-+  8'd6:name="ATARI5200      ";
-+  8'd7:name="HPD            ";
-+  8'd8:name="SATURN 3D      ";
-+  8'd9:name="GAMECUBE       ";
-+  8'd10:name="ATMARK         ";
-+  8'd11:name="JAGUAR         ";
-+  8'd13:name="NUNCHUK        ";
-+  8'd14:name="INTELLIV       ";
-+  8'd15:name="DREAMCAST ASCII";
-+  8'd16:name="DREAMCAST      ";
-+  8'd17:name="NES            ";
-+  8'd18:name="GAMECUBE WHEEL ";
-+  8'd19:name="N64            ";
-+  8'd20:name="MEGA DRIVE 3BTN";
-+  8'd21:name="MEGA DRIVE 6BTN";
-+  8'd22:name="SMS            ";
-+  8'd23:name="PC ENGINE      ";
-+  8'd24:name="CD32           ";
-+  8'd25:name="3DO            ";
-+  8'd26:name="PC-FX          ";
-+  8'd27:name="SNES           ";
-+  8'd28:name="ZAPPER         ";
-+  8'd29:name="VIRTUALBOY     ";
-+  8'd30:name="NES ARK        ";
-+  8'd31:name="WIICLASSIC     ";
-+  8'd32:name="MOTIONPLUS     ";
-+  8'd33:name="CD-I           ";
-+  8'd34:name="SAC            ";
-+  8'd35:name="DC TWIN        ";
-+  8'd36:name="POWERPAD       ";
-+  8'd37:name="3DO ANALOG     ";
-+  8'd38:name="EXTERMINATOR   ";
-+  8'd39:name="SIDEWINDER     ";
-+  8'd40:name="HAMMERHEAD     ";
-+  8'd41:name="ATARI PADDLES  ";
-+  8'd42:name="BALLY ASTROCADE";
-+  8'd43:name="ATARI KEYPAD   ";
-+  8'd45:name="SPEEK          ";
-+  8'd46:name="PC PAD         ";
-+  8'd47:name="SNES NTT       ";
-+  8'd48:name="COLECO FLASHBK ";
-+  8'd49:name="NEO GEO        ";
-+  8'd50:name="ATARI 5200 TB  ";
-+  8'd51:name="NEGCON         ";
-+  8'd52:name="FAMICOM        ";
-+  8'd53:name="FC ARKANOID    ";
-+  8'd54:name="PCE 6-BTN      ";
-+  8'd56:name="ARCADE         ";
-+  8'd58:name="SATURNGUN      ";
-+  8'd59:name="SMS GUN        ";
-+  8'd60:name="DC GUN         ";
-+  8'd61:name="GEMINI         ";
-+  8'd63:name="FC POWER       ";
-+  8'd64:name="ATARI TRACKBALL";
-+  8'd65:name="PSX DIGITAL    ";
-+  8'd67:name="WIIGUITAR      ";
-+  8'd68:name="DJ HERO        ";
-+  8'd69:name="WIITABLET      ";
-+  8'd71:name="FC NTT         ";
-+  8'd72:name="FAIRCHILD      ";
-+  8'd74:name="DC MARACAS     ";
-+  8'd115:name="PSX DUALSHOCK  ";
-+  8'd119:name="PSX DS GS      ";
-+  8'd121:name="PSX DUALSHOCK 2";
-+  8'd127:name="JOGCON         ";
++// ID 0 supplies the fallback. Row 12 is spare in the protocol table and
++// supplies the absent-pad message. A connected device reporting ID 12
++// still displays UNKNOWN, as it does for any other unassigned ID.
++localparam [6:0] UNKNOWN_ROW = 7'd0;
++localparam [6:0] ABSENT_ROW  = 7'd12;
++function automatic [6:0] name_address(input [9:0] port_info);
++ begin
++  if (port_info[9:8] == 2'b00)
++   name_address = ABSENT_ROW;
++  else if (port_info[9:8] == 2'b11 || port_info[7] || port_info[6:0] == ABSENT_ROW)
++   name_address = UNKNOWN_ROW;
++  else
++   name_address = port_info[6:0];
++ end
++endfunction
++
++function automatic [119:0] name(input [6:0] id);
++ case(id)
++  ABSENT_ROW:name="NOT DETECTED   ";
++  7'd1:name="COLECO         ";
++  7'd2:name="GX4000         ";
++  7'd3:name="SATURN         ";
++  7'd4:name="ATARI7800      ";
++  7'd5:name="VECTREX        ";
++  7'd6:name="ATARI5200      ";
++  7'd7:name="HPD            ";
++  7'd8:name="SATURN 3D      ";
++  7'd9:name="GAMECUBE       ";
++  7'd10:name="ATMARK         ";
++  7'd11:name="JAGUAR         ";
++  7'd13:name="NUNCHUK        ";
++  7'd14:name="INTELLIV       ";
++  7'd15:name="DREAMCAST ASCII";
++  7'd16:name="DREAMCAST      ";
++  7'd17:name="NES            ";
++  7'd18:name="GAMECUBE WHEEL ";
++  7'd19:name="N64            ";
++  7'd20:name="MEGA DRIVE 3BTN";
++  7'd21:name="MEGA DRIVE 6BTN";
++  7'd22:name="SMS            ";
++  7'd23:name="PC ENGINE      ";
++  7'd24:name="CD32           ";
++  7'd25:name="3DO            ";
++  7'd26:name="PC-FX          ";
++  7'd27:name="SNES           ";
++  7'd28:name="ZAPPER         ";
++  7'd29:name="VIRTUALBOY     ";
++  7'd30:name="NES ARK        ";
++  7'd31:name="WIICLASSIC     ";
++  7'd32:name="MOTIONPLUS     ";
++  7'd33:name="CD-I           ";
++  7'd34:name="SAC            ";
++  7'd35:name="DC TWIN        ";
++  7'd36:name="POWERPAD       ";
++  7'd37:name="3DO ANALOG     ";
++  7'd38:name="EXTERMINATOR   ";
++  7'd39:name="SIDEWINDER     ";
++  7'd40:name="HAMMERHEAD     ";
++  7'd41:name="ATARI PADDLES  ";
++  7'd42:name="BALLY ASTROCADE";
++  7'd43:name="ATARI KEYPAD   ";
++  7'd45:name="SPEEK          ";
++  7'd46:name="PC PAD         ";
++  7'd47:name="SNES NTT       ";
++  7'd48:name="COLECO FLASHBK ";
++  7'd49:name="NEO GEO        ";
++  7'd50:name="ATARI 5200 TB  ";
++  7'd51:name="NEGCON         ";
++  7'd52:name="FAMICOM        ";
++  7'd53:name="FC ARKANOID    ";
++  7'd54:name="PCE 6-BTN      ";
++  7'd56:name="ARCADE         ";
++  7'd58:name="SATURNGUN      ";
++  7'd59:name="SMS GUN        ";
++  7'd60:name="DC GUN         ";
++  7'd61:name="GEMINI         ";
++  7'd63:name="FC POWER       ";
++  7'd64:name="ATARI TRACKBALL";
++  7'd65:name="PSX DIGITAL    ";
++  7'd67:name="WIIGUITAR      ";
++  7'd68:name="DJ HERO        ";
++  7'd69:name="WIITABLET      ";
++  7'd71:name="FC NTT         ";
++  7'd72:name="FAIRCHILD      ";
++  7'd74:name="DC MARACAS     ";
++  7'd115:name="PSX DUALSHOCK  ";
++  7'd119:name="PSX DS GS      ";
++  7'd121:name="PSX DUALSHOCK 2";
++  7'd127:name="JOGCON         ";
 +  default:name="UNKNOWN        ";
 + endcase
-+ case(port_info[9:8])
-+  2'b00:line="NOT DETECTED   ";
-+  2'b01:line=name;
-+  2'b10:line={name[119:24],"(!)"};
-+  default:line="UNKNOWN        ";
-+ endcase
-+ character=8'h20;
-+ if(index<15) character=line[119-index*8 -:8];
++endfunction
++
++(* romstyle = "M10K" *) reg [119:0] names [0:127];
++initial begin
++ for (int id = 0; id < 128; id = id + 1)
++  names[id] = name(id[6:0]);
 +end
++
++// Each port continuously prefetches its own row. A detection change takes one
++// clk_sys edge to appear. Changing port or character index needs no extra edge.
++reg [119:0] p1_name, p2_name;
++reg p1_warning, p2_warning;
++always @(posedge clk_sys) begin
++ p1_name <= names[name_address(info[9:0])];
++ p2_name <= names[name_address(info[19:10])];
++ p1_warning <= info[9:8] == 2'b10;
++ p2_warning <= info[19:18] == 2'b10;
++end
++
++// Each row is padded to 16 characters so the reverse byte index is ~index.
++wire [255:0] both_names = {p2_name, 8'h20, p1_name, 8'h20};
++wire [4:0] selected_byte = {port_b, ~index};
++wire warning = port_b ? p2_warning : p1_warning;
++localparam [31:0] WARNING_SUFFIX = "(!) ";
++wire [1:0] suffix_byte = ~index[1:0];
++assign character = (warning && index >= 12)
++                 ? WARNING_SUFFIX[8*suffix_byte +: 8]
++                 : both_names[8*selected_byte +: 8];
 +endmodule
 +
 +// Reserved non-printing template bytes are replaced before Main sees them.
@@ -244,7 +283,7 @@ index 0000000..c6d5e3d
 +
 +
 +// Logical LLAPI controls, with the verified Saturn override per port.
-+module controller_shortcut_text(input [19:0] info,input [6:0] index,input [2:0] mode,input [1:0] af,output [7:0] character);
++module controller_shortcut_text(input [19:0] info,input [6:0] index,input [2:0] mode,output [7:0] character);
 +reg [191:0] line_text;
 +reg [4:0] column;
 +reg [9:0] port_info;
@@ -271,32 +310,22 @@ index 0000000..c6d5e3d
 + 4,6:line_text=p2 ? "P2 COIN:SELECT START:ST " : "P1 COIN:SELECT START:ST ";
 + default:line_text=p2 ? "P2: MAPPED COIN/START   " : "P1: MAPPED COIN/START   ";
 + endcase
-+ end else begin
-+ column=index-104;
-+ case(mode)
-+ 0:line_text="AUTOFIRE: LLAPI BTN4    ";
-+ 1:line_text="AUTOFIRE: A             ";
-+ 4:line_text="AUTOFIRE: X             ";
-+ 2:line_text="AUTOFIRE: MD3 C / MD6 X ";
-+ 3:line_text="AUTOFIRE: D             ";
-+ default:line_text="AUTOFIRE: UNAVAILABLE   ";
-+ endcase
 + end
 +end
 +assign character=column<24 ? line_text[191-column*8 -:8] : 8'd32;
 +endmodule
 +
 +
-+module enhanced_info_byte(input [7:0] original,input [19:0] info,output [7:0] rendered,input [2:0] mode,input [7:0] diagnostics,input [1:0] af,input [3:0] last_fault);
++module enhanced_info_byte(input clk_sys,input [7:0] original,input [19:0] info,output [7:0] rendered,input [2:0] mode,input [7:0] diagnostics,input [3:0] last_fault);
 +wire port_b=original>=17 && original<=31;
 +wire port_a=original>=1 && original<=15;
 +wire [7:0] offset=original-(port_b ? 8'd17 : 8'd1);
 +wire [7:0] text_byte;
-+controller_info_text u_text(port_b ? info[19:10] : info[9:0],offset[3:0],text_byte);
++controller_info_text u_text(clk_sys,info,port_b,offset[3:0],text_byte);
 +wire [7:0] guide_byte;
 +selected_interface_guide u_guide(mode,original[6:0],guide_byte);
 +wire [7:0] shortcut_byte;
-+controller_shortcut_text u_shortcut(info,original[6:0],mode,af,shortcut_byte);
++controller_shortcut_text u_shortcut(info,original[6:0],mode,shortcut_byte);
 +wire diagnostic_marker=original==127;
 +wire [7:0] diagnostic_digit=8'd48+((diagnostics >> ((original==127 ? 3 : original-29)*2)) & 8'd3);
 +// Reserved ROM markers for the two per-port latched reasons on the diagnostic page.
@@ -1947,8 +1976,42 @@ index 0000000..2bab4bb
 +assign fire=!rst && !inhibit && (manual_fire || (active && phase));
 +endmodule
 +`endif
+diff --git a/rtl/video/s32_video.sv b/rtl/video/s32_video.sv
+index 5a061ba..01e6c2c 100644
+--- a/rtl/video/s32_video.sv
++++ b/rtl/video/s32_video.sv
+@@ -489,10 +489,10 @@ module s32_video (
+     logic [5:0]  beam_col [0:3];
+     // Pattern rows, one buffer per NBG core, indexed by tile column. pq
+     // must stay a whole-element connection (Quartus 17 crashes on an
+-    // array-element part-select in a generate-indexed port). MLAB, because
+-    // the M10K blocks are all in use. Double-buffered like the cores' row
+-    // data: the streamer fills the walk line's bank while the beam reads
+-    // the displayed line's bank (pb_wbank / pb_rbank).
++    // array-element part-select in a generate-indexed port). Store these rows
++    // in M10K blocks to free LABs for the Enhanced controls. The streamer fills
++    // the walk line's bank while the beam reads the displayed line's bank
++    // (pb_wbank / pb_rbank).
+     // the bank is the walk target line's parity (row_line[0]), the same
+     // source every core uses, so all of a line's data lands in one bank
+     logic pb_wbank, pb_rbank;
+@@ -504,10 +504,10 @@ module s32_video (
+             if (bf_ls)     pb_rbank <= pb_wbank;
+         end
+     end
+-    (* ramstyle = "MLAB" *) logic [63:0] pb0 [0:127];
+-    (* ramstyle = "MLAB" *) logic [63:0] pb1 [0:127];
+-    (* ramstyle = "MLAB" *) logic [63:0] pb2 [0:127];
+-    (* ramstyle = "MLAB" *) logic [63:0] pb3 [0:127];
++    (* ramstyle = "M10K" *) logic [63:0] pb0 [0:127];
++    (* ramstyle = "M10K" *) logic [63:0] pb1 [0:127];
++    (* ramstyle = "M10K" *) logic [63:0] pb2 [0:127];
++    (* ramstyle = "M10K" *) logic [63:0] pb3 [0:127];
+     logic [63:0] pq  [0:3];            // registered beam-column reads
+     wire [63:0] pq_use [0:3];
+     assign pq_use[0] = pq[0]; assign pq_use[1] = pq[1];
 diff --git a/sys/hps_io.sv b/sys/hps_io.sv
-index ebe2058..55d5b84 100644
+index ebe2058..2998d80 100644
 --- a/sys/hps_io.sv
 +++ b/sys/hps_io.sv
 @@ -38,6 +38,7 @@
@@ -1965,7 +2028,7 @@ index ebe2058..55d5b84 100644
  
 -wire [7:0] conf_byte;
 +wire [7:0] conf_byte, enhanced_menu_byte;
-+enhanced_info_byte render_menu(conf_byte, enhanced_info, enhanced_menu_byte, status[89:87], 8'd0, 2'd0, 4'd0);
++enhanced_info_byte render_menu(clk_sys, conf_byte, enhanced_info, enhanced_menu_byte, status[89:87], 8'd0, 4'd0);
  generate
  	if(CONF_STR_BRAM) begin
  		confstr_rom #(CONF_STR, STRLEN) confstr_rom(.*, .conf_addr(byte_cnt - 1'd1));
@@ -1978,3 +2041,12 @@ index ebe2058..55d5b84 100644
  
  				// reading sd card status
  				'h16: if(!byte_cnt[MAX_W:2]) begin
+@@ -1094,7 +1096,7 @@ module confstr_rom #(parameter CONF_STR, STRLEN)
+ 	output reg [7:0] conf_byte
+ );
+ 
+-reg [7:0] rom[STRLEN];
++(* romstyle = "M10K" *) reg [7:0] rom[STRLEN];
+ 
+ initial begin
+ 	if( CONF_STR=="" )

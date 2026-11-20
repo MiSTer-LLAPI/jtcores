@@ -38,15 +38,11 @@ jobs:
             darius/quartus-version.txt
             darius/output_files/*.summary
             darius/output_files/*.rpt
+      - name: Report FPGA capacity and verify timing and controls without Autofire
+        if: ${{ !cancelled() }}
+        run: python3 enhanced/s32-ga2/verify_reports.py darius/output_files
       - name: Package private test build
         run: |
-          python3 - <<'PYTIMING'
-          from pathlib import Path
-          import re
-          report = Path('darius/output_files/S32.sta.summary').read_text()
-          slacks = [float(x) for x in re.findall(r'^Slack\s*:\s*([-\d.]+)', report, re.M)]
-          assert slacks and min(slacks) >= 0, slacks
-          PYTIMING
           mkdir -p install/_Arcade/cores
           cp darius/output_files/S32.rbf install/_Arcade/cores/S32_ga2_llapi10.rbf
           python3 - <<'PYMRA'
