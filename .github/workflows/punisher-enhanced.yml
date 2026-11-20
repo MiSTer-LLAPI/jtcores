@@ -82,7 +82,7 @@
         },
         {
           "name": "Simulate the MiSTer Turbo and controller settings used in this build",
-          "run": "set -euo pipefail\nif ! command -v iverilog >/dev/null; then\n  sudo apt-get update -qq\n  sudo apt-get install -y iverilog\nfi\nbash punisher-checks/enhanced/punisher/test_controls.sh | tee pilot-reports/controls-simulation.log"
+          "run": "set -euo pipefail\nif ! command -v iverilog >/dev/null; then\n  sudo apt-get update -qq\n  sudo apt-get install -y iverilog\nfi\nsudo chown \"$(id -u):$(id -g)\" pilot-reports\nbash punisher-checks/enhanced/punisher/test_controls.sh | tee pilot-reports/controls-simulation.log"
         },
         {
           "name": "Verify menu and package The Punisher",
