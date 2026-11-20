@@ -26,6 +26,7 @@ jobs:
       - name: Apply Enhanced controls
         run: git -C darius apply ../enhanced/s32-ga2/integration.patch
       - name: Compile using the upstream Quartus 17.0 Lite toolchain
+        id: compile
         run: |
           docker run --rm -v "$PWD/darius:/src" -w /src --entrypoint bash raetro/quartus:17.0 -ec '
             quartus_sh --version | tee quartus-version.txt
@@ -51,6 +52,7 @@ jobs:
             darius/output_files/*.summary
             darius/output_files/*.rpt
       - name: Report FPGA capacity and verify timing and controls without Autofire
+        id: validate
         if: ${{ !cancelled() }}
         run: python3 enhanced/s32-ga2/verify_reports.py darius/output_files
       - name: Package private test build
@@ -74,3 +76,11 @@ jobs:
         with:
           name: S32-GA2-Enhanced-1.0
           path: install/
+      - name: Retain the unvalidated RBF for local diagnosis
+        if: ${{ failure() && steps.compile.outcome == 'success' && steps.validate.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: S32-GA2-UNVALIDATED-RBF
+          path: darius/output_files/S32.rbf
+          if-no-files-found: error
+          retention-days: 3
