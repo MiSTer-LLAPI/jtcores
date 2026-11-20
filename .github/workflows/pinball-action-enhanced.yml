@@ -29,6 +29,15 @@ jobs:
             grep -F "17.0.2 Build 602" quartus-version.txt
             grep -F "Lite Edition" quartus-version.txt
             quartus_sh --flow compile PinballAction'
+      - name: Record detailed TimeQuest setup paths
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          if grep -Eq '^Fitter Status[[:space:]]*:[[:space:]]*Successful' darius/output_files/PinballAction.fit.summary; then
+            docker run --rm -v "$PWD/pinball:/src" -w /src \
+              -v "$PWD/enhanced/pinball/report_timing.tcl:/tmp/report_timing.tcl:ro" \
+              --entrypoint quartus_sta raetro/quartus:17.0 -t /tmp/report_timing.tcl
+          fi
       - name: Save compiler reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
