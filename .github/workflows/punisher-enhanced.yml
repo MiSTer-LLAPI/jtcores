@@ -6,7 +6,8 @@
         "test-punisher-enhanced-v1"
       ],
       "paths": [
-        ".github/workflows/punisher-enhanced.yml"
+        ".github/workflows/punisher-enhanced.yml",
+        "enhanced/punisher/**"
       ]
     }
   },
@@ -63,15 +64,29 @@
         },
         {
           "name": "Configure CPS1.5 for The Punisher",
-          "run": "set -eu\ncat >> cores/cps15/cfg/macros.def <<'EOF'\n\n[mister]\nJTFRAME_BUTTONS=6\nJTFRAME_LLAPI\nJTFRAME_NO_DB15\nJTFRAME_SNAC_PCE_NES\nJTFRAME_ENHANCED_CONTROLS\nJTFRAME_LLAPI_HIDE_DIAGNOSTICS\nEOF\nsed -e 's@cores/1944/mister@cores/cps15/mister@g' -e 's/jt1944/jtcps15/g' tests/llapi/check-1944-timing.py > tests/llapi/check-punisher-timing.py\nsed -e 's/jtcore 1944 /jtcore cps15 /g' -e 's/jt1944/jtcps15/g' -e 's/check-1944/check-punisher/g' -e '/^mkdir -p pilot-build/,$d' tests/llapi/build-1944.sh > tests/llapi/build-punisher.sh\n\npython3 - <<'PYTURBO'\nfrom pathlib import Path\np = Path('cores/cps1/cfg/common.def')\ns = p.read_text()\nassert s.count('OD,Turbo,Off,On;') == 1\np.write_text(s.replace('OD,Turbo,Off,On;', 'OD,Turbo,On,Off;'))\np = Path('cores/cps15/hdl/turbo.vh')\ns = p.read_text()\nassert s.count('assign turbo = status[13];') == 1\np.write_text(s.replace('assign turbo = status[13];', 'assign turbo = ~status[13];'))\nPYTURBO\n"
+          "run": "set -eu\ncat >> cores/cps15/cfg/macros.def <<'EOF'\n\n[mister]\nJTFRAME_BUTTONS=6\nJTFRAME_LLAPI\nJTFRAME_NO_DB15\nJTFRAME_SNAC_PCE_NES\nJTFRAME_ENHANCED_CONTROLS\nJTFRAME_LLAPI_HOLD_AUTOFIRE\nJTFRAME_LLAPI_AUTOFIRE_OPTIONS\nJTFRAME_LLAPI_HIDE_DIAGNOSTICS\nEOF\nsed -e 's@cores/1944/mister@cores/cps15/mister@g' -e 's/jt1944/jtcps15/g' tests/llapi/check-1944-timing.py > tests/llapi/check-punisher-timing.py\nsed -e 's/jtcore 1944 /jtcore cps15 /g' -e 's/jt1944/jtcps15/g' -e 's/check-1944/check-punisher/g' -e '/^mkdir -p pilot-build/,$d' tests/llapi/build-1944.sh > tests/llapi/build-punisher.sh\n\npython3 - <<'PYTURBO'\nfrom pathlib import Path\np = Path('cores/cps1/cfg/common.def')\ns = p.read_text()\nassert s.count('OD,Turbo,Off,On;') == 1\np.write_text(s.replace('OD,Turbo,Off,On;', 'OD,Turbo,On,Off;'))\np = Path('cores/cps15/hdl/turbo.vh')\ns = p.read_text()\nassert s.count('assign turbo = status[13];') == 1\np.write_text(s.replace('assign turbo = status[13];', 'assign turbo = ~status[13];'))\nPYTURBO\n"
+        },
+        {
+          "name": "Check out The Punisher regression tests",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "punisher-checks",
+            "sparse-checkout": "enhanced/punisher",
+            "persist-credentials": false
+          }
         },
         {
           "name": "Compile with unchanged clocks and strict timing acceptance",
           "run": "docker run --rm --network host --entrypoint /bin/bash -v \"$GITHUB_WORKSPACE:/jtcores\" -w /jtcores \"$BUILD_IMAGE\" -ec 'mkdir -p pilot-reports; quartus_sh --version | tee pilot-reports/quartus-version.txt; grep -Eq \"20\\.1\\.1.*Build 720.*Lite Edition\" pilot-reports/quartus-version.txt; bash /jtcores/tests/llapi/build-punisher.sh'"
         },
         {
+          "name": "Simulate the MiSTer Turbo and controller settings used in this build",
+          "run": "set -euo pipefail\nif ! command -v iverilog >/dev/null; then\n  sudo apt-get update -qq\n  sudo apt-get install -y iverilog\nfi\nbash punisher-checks/enhanced/punisher/test_controls.sh | tee pilot-reports/controls-simulation.log"
+        },
+        {
           "name": "Verify menu and package The Punisher",
-          "run": "python3 - <<'PYMENU'\nfrom pathlib import Path\ndata=bytes.fromhex(Path('cores/cps15/mister/cfgstr.hex').read_text())\nfor entry in [b'HCP3OO,Immediate Repoll,On,Off;',b'HCP3-,LLAPI Driver: 0.5.0;',b'-,Enhanced Core: 1.0;']:\n assert entry in data,entry\nassert b'OD,Turbo,On,Off;' in data\nassert b'TO CHANGE CONTROLLER' not in data\nPYMENU\nmkdir -p install/_Arcade/cores\ncp release/mister/jtcps15.rbf install/_Arcade/cores/jtpunish_llapi10.rbf\ncurl -fsSL --retry 3 'https://raw.githubusercontent.com/jotego/jtbin/7274a04840ba43ad529496b63bda9a18c491df68/mra/The%20Punisher%20(World%20930422).mra' -o /tmp/punisher.mra\npython3 - <<'PYMRA'\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\np=Path('/tmp/punisher.mra').read_bytes()\nassert ET.fromstring(p).findtext('rbf')=='jtcps15'\nPath('install/_Arcade/The Punisher.mra').write_bytes(p.replace(b'<rbf>jtcps15</rbf>', b'<rbf>jtpunish_llapi10</rbf>').replace(b'<name>The Punisher (World 930422)</name>',b'<name>The Punisher</name>'))\nPYMRA\n(cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)\n"
+          "run": "python3 - <<'PYMENU'\nfrom pathlib import Path\ndata=bytes.fromhex(Path('cores/cps15/mister/cfgstr.hex').read_text())\nfor entry in [b'HCP3OO,Immediate Repoll,On,Off;',b'HCP3-,LLAPI Driver: 0.5.0;',b'-,Enhanced Core: 1.0;']:\n assert entry in data,entry\nfor entry in (b'OD,Turbo,On,Off;', b'D7P2O8,P1 Autofire,Off,Hold;', b'D7P2ON,P2 Autofire,Off,Hold;'):\n assert data.count(entry) == 1, entry\nassert b'TO CHANGE CONTROLLER' not in data\nPYMENU\nmkdir -p install/_Arcade/cores\ncp release/mister/jtcps15.rbf install/_Arcade/cores/jtpunish_llapi10.rbf\ncurl -fsSL --retry 3 'https://raw.githubusercontent.com/jotego/jtbin/7274a04840ba43ad529496b63bda9a18c491df68/mra/The%20Punisher%20(World%20930422).mra' -o /tmp/punisher.mra\npython3 - <<'PYMRA'\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\np=Path('/tmp/punisher.mra').read_bytes()\nassert ET.fromstring(p).findtext('rbf')=='jtcps15'\nPath('install/_Arcade/The Punisher.mra').write_bytes(p.replace(b'<rbf>jtcps15</rbf>', b'<rbf>jtpunish_llapi10</rbf>').replace(b'<name>The Punisher (World 930422)</name>',b'<name>The Punisher</name>'))\nPYMRA\n(cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)\n"
         },
         {
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
