@@ -1,8 +1,22 @@
 diff --git a/PinballAction.qsf b/PinballAction.qsf
-index 00104cc..c88a156 100644
+index 00104cc..e5f4f12 100644
 --- a/PinballAction.qsf
 +++ b/PinballAction.qsf
-@@ -78,4 +78,11 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_bg.v
+@@ -53,13 +53,6 @@ source sys/sys.tcl
+ source sys/sys_analog.tcl
+ source files.qip
+ 
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_bus.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_cen.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_div.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_eg.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_exp.v
+-set_global_assignment -name VERILOG_FILE rtl/JT49/jt49_noise.v
+ 
+ set_global_assignment -name ENABLE_SIGNALTAP OFF
+ # set_global_assignment -name USE_SIGNALTAP_FILE pbaction_stp.stp
+@@ -78,4 +71,11 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_bg.v
  set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_sprites.v
  set_global_assignment -name SYSTEMVERILOG_FILE rtl/pbaction_palette.v
  set_global_assignment -name VERILOG_FILE rtl/dpram.v
