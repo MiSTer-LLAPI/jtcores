@@ -120,6 +120,8 @@ def verify_fit(reports):
     status = summary.get("Fitter Status", "missing")
     if not status.startswith("Successful") or used > available:
         raise ValueError(f"Fitter status: {status}. LABs requested: {used} / {available}")
+    if re.search(rb"^; +\|s32_dspbd:u_dspbd\| +; +[1-9]\d*(?:\.\d+)? ", fit_report, re.M):
+        raise ValueError("Dedicated Golden Axe build still uses logic for the Air Rescue DSP")
 
 
 if __name__ == "__main__":

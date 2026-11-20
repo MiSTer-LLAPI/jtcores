@@ -8,6 +8,8 @@ module tb_controls;
     reg [31:0] buttons1 = 0, buttons2 = 0;
     reg [8:0] snac1 = 0, snac2 = 0;
     reg [127:0] settings = 0;
+    reg descriptor_write = 0;
+    reg [7:0] descriptor_byte = 0;
     reg [1:0] valid = 0;
     wire [2:0] mode = settings[89:87];
     wire valid1 = valid[0], valid2 = valid[1];
@@ -20,6 +22,14 @@ module tb_controls;
                    dut.in_p1, dut.in_p2, dut.in_service12, p1, p2, service);
     endtask
 
+    task load_descriptor(input [7:0] value);
+        @(negedge clk);
+        descriptor_byte = value;
+        descriptor_write = 1;
+        @(negedge clk);
+        descriptor_write = 0;
+    endtask
+
     initial begin
         force dut.clk_sys = clk;
         force dut.vblank = frame;
@@ -28,6 +38,11 @@ module tb_controls;
         force dut.joystick_2 = usb2;
         force dut.joystick_3 = usb3;
         force dut.status = settings;
+        force dut.ioctl_wr = descriptor_write;
+        force dut.ioctl_download = descriptor_write;
+        force dut.ioctl_index = 1;
+        force dut.ioctl_addr = 0;
+        force dut.ioctl_dout = descriptor_byte;
         force dut.OSD_STATUS = 0;
         force dut.controllers.ready_sys = 1;
         force dut.controllers.active_sys = mode;
@@ -100,6 +115,24 @@ module tb_controls;
         #1;
         if ({dut.in_extra1, dut.in_extra2, dut.in_extra3} !== 24'hfbfdfc)
             $fatal(1, "P3/P4 native controls");
+
+        // Each official Golden Axe MRA loads a single cabinet descriptor.
+        // The US cabinet remaps Coin 1/2 to the four-player expansion.
+        settings[89:87] = 7;
+        valid = 0; // the inactive LLAPI reader has released both slots
+        usb0 = (1<<8) | (1<<7);
+        usb1 = (1<<7);
+        usb2 = (1<<8);
+        usb3 = (1<<7);
+        load_descriptor(8'h00); // World
+        check_cabinet('hff, 'hff, 'hcb);
+        if (dut.in_extra3 !== 8'hfd) $fatal(1, "World cabinet coin routing");
+        load_descriptor(8'h01); // US
+        check_cabinet('hff, 'hff, 'hc7);
+        if (dut.in_extra3 !== 8'hf5) $fatal(1, "US cabinet coin routing");
+        load_descriptor(8'h00); // Japan, after a US game
+        check_cabinet('hff, 'hff, 'hcb);
+        if (dut.in_extra3 !== 8'hfd) $fatal(1, "Japan cabinet coin routing");
         $display("PASS: USB/LLAPI/SNES cabinet inputs, independent Start/Coin, Service/Test, manual actions and P3/P4");
         $finish;
     end

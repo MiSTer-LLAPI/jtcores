@@ -5,6 +5,9 @@ on:
     paths: ['.github/workflows/s32-ga2-enhanced.yml', 'enhanced/s32-ga2/**']
 permissions:
   contents: read
+concurrency:
+  group: s32-ga2-enhanced
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,6 +32,15 @@ jobs:
             grep -E "17\.0\..*Lite Edition" quartus-version.txt
             grep -F "17.0.2 Build 602" quartus-version.txt
             quartus_sh --flow compile S32'
+      - name: Record detailed TimeQuest setup paths
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          if grep -q '^Fitter Status : Successful' darius/output_files/S32.fit.summary; then
+            docker run --rm -v "$PWD/darius:/src" -w /src \
+              -v "$PWD/enhanced/s32-ga2/report_timing.tcl:/tmp/report_timing.tcl:ro" \
+              --entrypoint quartus_sta raetro/quartus:17.0 -t /tmp/report_timing.tcl
+          fi
       - name: Save compiler reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -52,6 +64,8 @@ jobs:
           data=p.read_bytes()
           root=ET.fromstring(data)
           assert root.findtext('rbf')=='S32' and root.findtext('setname')=='ga2'
+          descriptor=root.findall("./rom[@index='1']/part")
+          assert len(descriptor)==1 and bytes.fromhex(descriptor[0].text)==b'\x00'
           assert root.find('buttons').get('names').startswith('Attack,Jump,Magic,Start,Coin')
           Path('install/_Arcade',p.name).write_bytes(data.replace(b'<rbf>S32</rbf>',b'<rbf>S32_ga2_llapi10</rbf>'))
           PYMRA

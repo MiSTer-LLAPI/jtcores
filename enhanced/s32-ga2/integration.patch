@@ -1,5 +1,5 @@
 diff --git a/S32.qsf b/S32.qsf
-index d3ceece..bdb24f3 100644
+index d3ceece..abeca63 100644
 --- a/S32.qsf
 +++ b/S32.qsf
 @@ -42,7 +42,7 @@ set_global_assignment -name ALLOW_POWER_UP_DONT_CARE ON
@@ -26,12 +26,22 @@ index d3ceece..bdb24f3 100644
  
  # This tree is the release configuration of the core: the sources carry no
  # configuration switches, so no core VERILOG_MACRO is needed here. The lines
-@@ -138,3 +138,11 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
+@@ -120,6 +120,8 @@ set_instance_assignment -name MAX_FANOUT 12 -to "ascal|o_vcpt_pre3[0]~0"
+ set_instance_assignment -name MAX_FANOUT 12 -to "ascal|o_vcpt_pre2[3]~0"
+ # The same enable's name in the dev (HUD) netlist; binds nothing in this one.
+ set_instance_assignment -name MAX_FANOUT 12 -to "ascal|o_vcpt[7]~0"
++# Enhanced seeds 3 and 7 both mapped the 48-load enable to this alias.
++set_instance_assignment -name MAX_FANOUT 12 -to "ascal|o_vcpt_pre3[10]~0"
+ 
+ # ---- 2026-10-28: the vendored jt12's small memories out of M10K -------------
+ # M10K is the binding resource (docs/corertlcleanup.md B2). Per YM3438 the
+@@ -138,3 +140,12 @@ set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:bo
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_logsin:u_logsin"
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym1|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
  set_instance_assignment -name AUTO_ROM_RECOGNITION OFF -to "emu:emu|s32_board:board|s32_sys:u_sys|s32_soundtop:u_snd|jt12:u_ym2|jt12_top:u_jt12|jt12_op:u_op|jt12_exprom:u_exprom"
 +
 +set_global_assignment -name VERILOG_MACRO "JTFRAME_ENHANCED_CONTROLS=1"
++set_global_assignment -name VERILOG_MACRO "S32_GA2_ONLY=1"
 +set_global_assignment -name VERILOG_MACRO "JTFRAME_SNAC_PCE_NES=1"
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/controller_text.sv
 +set_global_assignment -name VERILOG_FILE enhanced/joydb15.v
@@ -39,7 +49,7 @@ index d3ceece..bdb24f3 100644
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_llapi_protocol.sv
 +set_global_assignment -name SYSTEMVERILOG_FILE enhanced/jtframe_serial_arcade.sv
 diff --git a/S32.sv b/S32.sv
-index 0ca7c3d..d333e60 100644
+index 0ca7c3d..4f7539a 100644
 --- a/S32.sv
 +++ b/S32.sv
 @@ -27,7 +27,7 @@ module emu
@@ -109,7 +119,33 @@ index 0ca7c3d..d333e60 100644
  	.joystick_2(joystick_2),
  	.joystick_3(joystick_3),
  	.joystick_l_analog_0(stick_0),
-@@ -1075,4 +1088,26 @@ video_freak video_freak
+@@ -516,6 +529,17 @@ assign ioctl_din = (ioctl_addr >= 27'd128) ? zram_nv_rdata
+ //
+ // These describe how the game's board and cabinet are built, not operator
+ // settings, so they live in the .mra rather than the OSD.
++`ifdef S32_GA2_ONLY
++// The Golden Axe descriptors differ only in the US coin/start wiring bit.
++// Keep it writable and let the fitter remove the unrelated cabinet hardware.
++reg us_cabinet = 1'b0;
++always @(posedge clk_sys)
++	if (ioctl_wr && ioctl_download && ioctl_index == 1 && ioctl_addr == 0)
++		us_cabinet <= ioctl_dout[0];
++wire [7:0] board_cfg = {7'd0, us_cabinet};
++localparam [7:0] board_cfg2 = 8'h00;
++localparam [7:0] board_cfg3 = 8'h00;
++`else
+ reg [7:0] board_cfg = 8'h00;
+ reg [7:0] board_cfg2 = 8'h00;
+ reg [7:0] board_cfg3 = 8'h00;
+@@ -529,6 +553,7 @@ always @(posedge clk_sys)
+ 		if (ioctl_addr == 1) board_cfg2 <= ioctl_dout;
+ 		if (ioctl_addr == 2) board_cfg3 <= ioctl_dout;
+ 	end
++`endif
+ 
+ //////////////////////   INPUTS   ////////////////////////////////
+ 
+@@ -1075,4 +1100,26 @@ video_freak video_freak
  assign AUDIO_L = audio_l;
  assign AUDIO_R = audio_r;
  
