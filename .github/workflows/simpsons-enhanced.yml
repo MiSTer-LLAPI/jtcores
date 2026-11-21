@@ -68,7 +68,7 @@
         },
         {
           "name": "Compile",
-          "run": "docker run --rm --network host --entrypoint /bin/bash -v \"$GITHUB_WORKSPACE:/jtcores\" -w /jtcores \"$BUILD_IMAGE\" -ec 'mkdir -p pilot-reports; quartus_sh --version | tee pilot-reports/quartus-version.txt; grep -Eq \"20\\.1\\.1.*Build 720.*Lite Edition\" pilot-reports/quartus-version.txt; (git config --global --add safe.directory /jtcores && source /jtcores/setprj.sh && jtframe mra simson --skipMRA --skipROM --skipPocket --mainonly && test -s cores/simson/hdl/jtsimson_header.v); bash /jtcores/tests/llapi/build-simson.sh'"
+          "run": "docker run --rm --network host --entrypoint /bin/bash -v \"$GITHUB_WORKSPACE:/jtcores\" -w /jtcores \"$BUILD_IMAGE\" -ec 'mkdir -p pilot-reports; quartus_sh --version | tee pilot-reports/quartus-version.txt; grep -Eq \"20\\.1\\.1.*Build 720.*Lite Edition\" pilot-reports/quartus-version.txt; bash /jtcores/tests/llapi/build-simson.sh'"
         },
         {
           "name": "Verify menu and package simson",
