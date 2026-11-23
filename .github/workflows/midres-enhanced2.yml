@@ -1,0 +1,79 @@
+name: Midnight Resistance Enhanced 2.0
+on:
+  push:
+    branches: [test-midres-enhanced2]
+    paths: ['.github/enhanced/midres/**', '.github/workflows/midres-enhanced2.yml']
+permissions:
+  contents: read
+concurrency:
+  group: midres-enhanced2
+  cancel-in-progress: false
+jobs:
+  mister:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - name: Check out integration for this run
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          path: integration
+          sparse-checkout: .github/enhanced/midres
+      - name: Check out public Jotego hardware
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: 660989b25f735814224dc3535db931041861f568
+          path: source
+          persist-credentials: false
+      - name: Load the exact public CPU and audio components and apply the Enhanced profile
+        run: |
+          set -eu
+          git submodule update --init --recursive --depth 1 -- modules/fx68k modules/jt6295 modules/jtopl modules/jt12
+          support="../integration/.github/enhanced/midres"
+          for patch in jtframe midres rotary; do
+            git apply --whitespace=nowarn --check "$support/$patch.patch"
+            git apply --whitespace=nowarn "$support/$patch.patch"
+          done
+      - name: Exercise four independent game actions and the two-player controls
+        run: |
+          if ! command -v iverilog >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y iverilog
+          fi
+          sh ../integration/.github/enhanced/midres/tests/run.sh
+      - name: Compile with the original clocks and verify timing
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash \
+            -v "$PWD:/jtcores" -v "$GITHUB_WORKSPACE/integration/.github/enhanced/midres:/enhanced:ro" \
+            -w /jtcores "$BUILD_IMAGE" -ec '
+              mkdir -p pilot-reports
+              quartus_sh --version | tee pilot-reports/quartus-version.txt
+              grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+              bash /enhanced/build.sh'
+      - name: Validate compiled menus and package the test build
+        run: |
+          python3 ../integration/.github/enhanced/midres/verify.py --package
+          (cd install && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Midnight-Resistance-Enhanced-2.0-Test
+          path: source/install/
+          if-no-files-found: error
+      - name: Upload compilation records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Midnight-Resistance-Enhanced-2.0-reports
+          path: |
+            source/pilot-reports/
+            source/cores/midres/mister/cfgstr.hex
+            source/cores/midres/mister/msg.hex
+            source/cores/midres/mister/**/*.fit.summary
+            source/cores/midres/mister/**/*.sta.summary
+            source/log/mister/

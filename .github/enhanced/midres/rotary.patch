@@ -1,0 +1,310 @@
+--- a/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
+@@ -156,6 +156,16 @@
+     (* async_reg="true" *) reg valid1_meta=0,valid1_sync=0;
+     (* async_reg="true" *) reg valid2_meta=0,valid2_sync=0;
+     (* async_reg="true" *) reg saturn1_meta=0,saturn1_sync=0,saturn2_meta=0,saturn2_sync=0;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    // Decode the adapter's reported pad type in its own clock domain.
++    // Synchronize the small flags alongside the existing buttons and validity.
++    wire [1:0] snes_type50 = {type2==27 || type2==47, type1==27 || type1==47};
++    (* async_reg="true" *) reg [1:0] snes_meta=0, snes_sync=0;
++    always @(posedge clk_sys) begin
++        snes_meta <= rst ? 2'b00 : snes_type50;
++        snes_sync <= rst ? 2'b00 : snes_meta;
++    end
++`endif
+     always @(posedge clk_sys) begin
+         if(rst) begin
+             saturn1_meta<=0;saturn1_sync<=0;saturn2_meta<=0;saturn2_sync<=0;
+@@ -164,8 +174,15 @@
+             valid1_meta<=0; valid1_sync<=0;
+             valid2_meta<=0; valid2_sync<=0;
+         end else begin
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++            saturn1_meta<=valid1 && (type1==3 || type1==8);
++            saturn2_meta<=valid2 && (type2==3 || type2==8);
++            saturn1_sync<=saturn1_meta;
++            saturn2_sync<=saturn2_meta;
++`else
+             saturn1_meta<=valid1 && type1==8'd3;saturn1_sync<=saturn1_meta;
+             saturn2_meta<=valid2 && type2==8'd3;saturn2_sync<=saturn2_meta;
++`endif
+             buttons1_meta<=buttons1; buttons1_sync<=buttons1_meta;
+             buttons2_meta<=buttons2; buttons2_sync<=buttons2_meta;
+             valid1_meta<=valid1; valid1_sync<=valid1_meta;
+@@ -202,6 +219,9 @@
+ `endif
+     jtframe_llapi_arcade_map #(.BUTTONS(BUTTONS)) u_map(
+         .buttons1(buttons1_sync),.buttons2(buttons2_sync),
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++        .snes(snes_sync),
++`endif
+         .saturn1(saturn1_sync),.saturn2(saturn2_sync),
+         .valid1(valid1_sync),.valid2(valid2_sync),.osd_active(osd_active),
+         .usb1(usb1),.usb2(usb2),.joy1(joy1),.joy2(joy2),
+@@ -212,6 +232,9 @@
+     input [31:0] buttons1,buttons2,
+     input valid1,valid2,osd_active,
+     input tri0 saturn1,saturn2,
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    input [1:0] snes,
++`endif
+     input [15:0] usb1,usb2,
+     output [15:0] joy1,joy2,
+     output [3:0] start,coin,
+@@ -219,6 +242,33 @@
+ );
+     wire [31:0] p1=valid1 ? buttons1 : 32'd0;
+     wire [31:0] p2=valid2 ? buttons2 : 32'd0;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    // Midnight Resistance uses separate rotational switches. LLAPI HID
++    // numbers are one-based; vector indices here are zero-based.
++    function automatic [15:0] rotary_buttons(input [31:0] p, input snes_pad, saturn_pad);
++        reg [15:0] decoded;
++        begin
++            decoded=0;
++            decoded[3:0]=p[27:24];
++            decoded[4]=snes_pad ? p[2] : p[0];    // SNES Y
++            decoded[5]=snes_pad ? p[0] : p[1];    // SNES B
++            decoded[6]=saturn_pad ? p[8] : p[6];  // L
++            decoded[7]=saturn_pad ? p[9] : p[7];  // R
++            rotary_buttons=decoded;
++        end
++    endfunction
++    wire [15:0] rotary1=rotary_buttons(p1,snes[0],saturn1);
++    wire [15:0] rotary2=rotary_buttons(p2,snes[1],saturn2);
++    assign osd_request=(p1[26] && p1[5] && rotary1[4]) ||
++                       (p2[26] && p2[5] && rotary2[4]);
++    wire inhibit=osd_active || osd_request;
++    assign joy1=valid1 ? (inhibit ? 16'd0 : rotary1) : usb1;
++    assign joy2=valid2 ? (inhibit ? 16'd0 : rotary2) : (valid1 ? usb1 : usb2);
++    // Each socket supplies its own Start; L must never start player two.
++    assign start=inhibit ? 4'd0 : {2'b00,p2[5],p1[5]};
++    assign coin=inhibit ? 4'd0 : {2'b00,(saturn2 ? p2[6] : p2[4]),
++                                         (saturn1 ? p1[6] : p1[4])};
++`else
+     assign osd_request=(p1[26]&p1[5]&p1[0]) | (p2[26]&p2[5]&p2[0]);
+     wire inhibit=osd_active | osd_request;
+     function automatic [15:0] game_buttons(input [31:0] p);
+@@ -239,6 +289,7 @@
+     // from either socket. Button 4 is that socket's coin input.
+     assign start=inhibit ? 4'd0 : {2'b0,(!saturn1 && p1[6]) | (saturn2 ? p2[5] : p2[6]),p1[5] | (!saturn2 && p2[5])};
+     assign coin=inhibit ? 4'd0 : {2'b0,(saturn2 ? p2[6] : p2[4]),(saturn1 ? p1[6] : p1[4])};
++`endif
+ endmodule
+ 
+ 
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -64,8 +64,15 @@
+     );
+     wire [8:0] snac_pad,snac_pad2;
+     wire [2:0] reader_mode=mode50==1 ? 3 : mode50==2 ? 2 : mode50==4 ? 1 : mode50==5 ? 4 : mode50==6 ? 5 : 0;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    wire [1:0] snac_right;
++    wire md_three;
++`endif
+     jtframe_snac_arcade #(.BUTTONS(BUTTONS)) u_snac(.clk_50(clk_50),
+         .enable(ready50 && reader_mode!=0),.mode(reader_mode),
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++        .turn_right(snac_right),.md_three(md_three),
++`endif
+         .user_in(user_in),.user_out(snac_out),.pad(snac_pad),.pad2(snac_pad2),.autofire_hold(snac_af));
+     // Only one mux drives the physical connector. Inactive readers cannot
+     // drive pins, and all pins are released while changing protocol.
+@@ -98,10 +105,47 @@
+          ((active_sys==4 || active_sys==6) && pad2_sys[2] && pad2_sys[7] && pad2_sys[4])));
+     wire inhibit=osd_active || snac_menu;
+     wire [15:0] raw_joy1,raw_joy2;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    wire [1:0] turn_right=mode50==3 ? {db2[7],db1[7]} : snac_right;
++    (* async_reg="true" *) reg [1:0] right_meta=0,right_sys=0;
++    (* async_reg="true" *) reg md_three_meta=0,md_three_sys=0;
++    always @(posedge clk_sys) begin
++        md_three_meta<=md_three;
++        md_three_sys<=md_three_meta;
++        right_meta<=turn_right;
++        right_sys<=right_meta;
++    end
++`else
++    wire [1:0] right_sys=0;
++`endif
++    wire [7:0] snac_game1,snac_game2;
++    wire [1:0] snac_start;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    // Only compact pads need a modifier. A plain Start tap still starts.
++    (* async_reg="true" *) reg rotary_vb_meta=0,rotary_vb_sys=0;
++    always @(posedge clk_sys) begin
++        rotary_vb_meta<=vblank;
++        rotary_vb_sys<=rotary_vb_meta;
++    end
++    wire compact1=active_sys==5 || active_sys==6 || (active_sys==2 && md_three_sys);
++    wire compact2=active_sys==6;
++    jtframe_rotary_pad rotary_p1(
++        .clk(clk_sys),.rst(rst),.enable(stable && compact1),.inhibit(inhibit),
++        .vblank(rotary_vb_sys),.pad(pad_sys),.right_button(right_sys[0]),
++        .game(snac_game1),.start(snac_start[0]));
++    jtframe_rotary_pad rotary_p2(
++        .clk(clk_sys),.rst(rst),.enable(stable && compact2),.inhibit(inhibit),
++        .vblank(rotary_vb_sys),.pad(pad2_sys),.right_button(right_sys[1]),
++        .game(snac_game2),.start(snac_start[1]));
++`else
++    assign snac_game1={right_sys[0],pad_sys[6:0]};
++    assign snac_game2={right_sys[1],pad2_sys[6:0]};
++    assign snac_start={pad2_sys[7],pad_sys[7]};
++`endif
+     assign raw_joy1=!stable ? usb1 : !snac_selected ? llapi_joy1 :
+-                 inhibit ? 16'd0 : {9'd0,pad_sys[6:0]};
++                 inhibit ? 16'd0 : {8'd0,snac_game1};
+     assign raw_joy2=!stable ? usb2 : dual_snac ?
+-                 (inhibit ? 16'd0 : {9'd0,pad2_sys[6:0]}) :
++                 (inhibit ? 16'd0 : {8'd0,snac_game2}) :
+                  snac_selected ? usb1 : llapi_joy2;
+ `ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
+     (* async_reg="true" *) reg [1:0] snac_af_meta=0,snac_af_sys=0;
+@@ -110,7 +154,11 @@
+         snac_af_meta<=snac_af;snac_af_sys<=snac_af_meta;
+         vb_meta<=vblank;vb_sync<=vb_meta;
+     end
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    wire [1:0] db_af={db2[8],db1[8]}; // E is free; C and D rotate.
++`else
+     wire [1:0] db_af={db2[7],db1[7]};
++`endif
+     (* async_reg="true" *) reg [1:0] db_af_meta=0,db_af_sys=0;
+     always @(posedge clk_sys) begin db_af_meta<=db_af;db_af_sys<=db_af_meta;end
+     // Two-button SNAC pads have no spare autofire control. Never consume manual fire.
+@@ -135,12 +183,51 @@
+     assign joy1=raw_joy1;assign joy2=raw_joy2;
+ `endif
+     assign start=!stable ? 4'd0 : !snac_selected ? llapi_start :
+-                 {2'd0,dual_snac && pad2_sys[7] && !inhibit,
+-                  pad_sys[7] && (!pad_sys[8] || db15_selected) && !inhibit};
++                 {2'd0,dual_snac && snac_start[1] && !inhibit,
++                  snac_start[0] && (!pad_sys[8] || db15_selected) && !inhibit};
+     assign coin=!stable ? 4'd0 : !snac_selected ? llapi_coin :
+                  {2'd0,dual_snac && pad2_sys[8] && !inhibit,pad_sys[8] && !inhibit};
+     assign osd_request=stable && (snac_selected ? snac_menu : llapi_osd);
+ endmodule
++
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++// Compact pads have too few buttons for independent rotation. Holding Start
++// changes only horizontal movement into rotation. Commit a standalone Start
++// on release, after it is known not to have been used for rotation/coin/menu.
++module jtframe_rotary_pad(
++    input clk,rst,enable,inhibit,vblank,
++    input [8:0] pad,input right_button,
++    output [7:0] game,output start
++);
++    reg prev_start=0,used=0,prev_frame=0,pulse=0,frame_seen=0,armed=0;
++    wire rotate=enable && pad[7] && |pad[1:0];
++    always @(posedge clk) begin
++        prev_frame<=vblank;
++        prev_start<=pad[7];
++        if(rst || !enable || inhibit) begin
++            armed<=0;
++            used<=0;
++            pulse<=0;
++            frame_seen<=0;
++        end else begin
++            if(!pad[7]) armed<=1;
++            if(pad[7] && (rotate || pad[8])) used<=1;
++            if(prev_start && !pad[7]) begin
++                // Do not leak a Start if the last held sample opened the OSD.
++                pulse<=armed && !used;
++                frame_seen<=0;
++                used<=0;
++            end else if(pulse && vblank && !prev_frame) begin
++                if(frame_seen) pulse<=0;
++                frame_seen<=1;
++            end
++        end
++    end
++    assign start=enable ? pulse : pad[7];
++    assign game=rotate ? {pad[0],pad[1] || pad[6],pad[5:2],2'b00}
++                       : {right_button,pad[6:0]};
++endmodule
++`endif
+ 
+ module jtframe_snac_arcade #(
+     parameter BUTTONS=3,
+@@ -152,6 +239,10 @@
+     input [6:0] user_in,
+     output reg [6:0] user_out=7'h7f,
+     // [8] coin, [7] start, [6:4] buttons, [3:0] UDLR, active high
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++    output reg [1:0] turn_right=0,
++    output reg md_three=0,
++`endif
+     output reg [1:0] autofire_hold=0,
+     output reg [8:0] pad=0,pad2=0
+ );
+@@ -176,6 +267,10 @@
+     always @(posedge clk_50) begin
+         old_mode<=mode;
+         if(!enable || mode==0 || mode>5 || mode!=old_mode) begin
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++            turn_right<=0;
++            md_three<=0;
++`endif
+             autofire_hold<=0; ticks<=0; phase<=0; user_out<=7'h7f; pad<=0; pad2<=0;
+             nes<=8'hff;nes2<=8'hff;pce_dir<=4'hf;pce_buttons<=4'hf;
+             snes<=16'hffff; snes2<=16'hffff; md_valid<=0; md_six<=0;
+@@ -229,12 +324,23 @@
+                     if(phase>=4 && phase<=34 && !phase[0]) begin user_out[1]<=1; user_out[3]<=1; end
+                     if(phase==35) begin
+                         autofire_hold<={(snes2[15:12]==4'hf)&&!snes2[9],(snes[15:12]==4'hf)&&!snes[9]};
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++                        if(snes[15:12]==4'hf)
++                            pad<={~snes[2],~snes[3],~snes[10],~snes[0],~snes[1],~snes[4],~snes[5],~snes[6],~snes[7]};
++                        else pad<=0;
++                        if(snes2[15:12]==4'hf)
++                            pad2<={~snes2[2],~snes2[3],~snes2[10],~snes2[0],~snes2[1],~snes2[4],~snes2[5],~snes2[6],~snes2[7]};
++                        else pad2<=0;
++                        turn_right<={(snes2[15:12]==4'hf) && !snes2[11],
++                                     (snes[15:12]==4'hf) && !snes[11]};
++`else
+                         if(snes[15:12]==4'hf)
+                             pad<={~snes[2],~snes[3],~snes[1],~snes[8],~snes[0],~snes[4],~snes[5],~snes[6],~snes[7]};
+                         else pad<=0;
+                         if(snes2[15:12]==4'hf)
+                             pad2<={~snes2[2],~snes2[3],~snes2[1],~snes2[8],~snes2[0],~snes2[4],~snes2[5],~snes2[6],~snes2[7]};
+                         else pad2<=0;
++`endif
+                     end
+                 end
+                 2: begin
+@@ -249,6 +355,11 @@
+                         6: begin md_extra<=md_in[3:0]; user_out[4]<=0; end
+                         7: begin
+                             user_out[4]<=1;
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++                            // Extension phase returns Mode, X, Y, Z. C and Z turn.
++                            turn_right<={1'b0,md_valid && md_six && !md_extra[0]};
++                            md_three<=md_valid && !md_six;
++`endif
+                             // MD6 X is separate from ABC/Mode/Start and only
+                             // valid after the extension handshake; MD3 has no X.
+                             autofire_hold<={1'b0,md_valid && (md_six ? !md_extra[2] : BUTTONS==2 && !md_high[5])};
+@@ -277,11 +388,19 @@
+                             // retaining stale data or inventing button presses.
+                             // Extra nibble is {R,X,Y,Z}; X is unused by game actions.
+                             autofire_hold <= {1'b0, sat_in[2:0]==3'b100 && !sat_extra[2]};
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++                            turn_right<={1'b0,sat_in[2:0]==3'b100 && !sat_extra[3]};
++`endif
+                             if(sat_in[2:0]==3'b100) begin
+                                 pad[3:0]<=~{sat_dir[0],sat_dir[1],sat_dir[2],sat_dir[3]};
++                                pad[7]<=~sat_main[3];
++`ifdef JTFRAME_LLAPI_ROTARY_ACTIONS
++                                pad[6:4]<=~{sat_in[3],sat_main[1],sat_main[0]}; // L,C,B
++                                pad[8]<=~sat_extra[0]; // Z inserts coin
++`else
+                                 pad[6:4]<=~{sat_main[2],sat_main[1],sat_main[0]}; // A,C,B
+-                                pad[7]<=~sat_main[3];
+                                 pad[8]<=~sat_in[3]; // L inserts coin
++`endif
+                             end else pad<=0;
+                         end
+                     endcase
