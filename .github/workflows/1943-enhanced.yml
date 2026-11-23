@@ -1,9 +1,9 @@
 {
-  "name": "1943 Enhanced 1.0",
+  "name": "1943 Gamer-Pro Level Shifter test",
   "on": {
     "push": {
       "branches": [
-        "test-1943-enhanced-v1"
+        "test-1943-gamerpro-early-sync"
       ],
       "paths": [
         ".github/workflows/1943-enhanced.yml"
@@ -14,7 +14,7 @@
     "contents": "read"
   },
   "concurrency": {
-    "group": "1943-enhanced-v1",
+    "group": "test-1943-gamerpro-early-sync",
     "cancel-in-progress": false
   },
   "jobs": {
@@ -63,6 +63,10 @@
           "run": "python3 - <<'PYCODE'\nimport base64,gzip,hashlib,json\nfrom pathlib import Path\ndata=base64.b64decode(Path('/tmp/1944.b64').read_bytes())\nassert hashlib.sha256(data).hexdigest()=='0731bb5551662d517967045245291b7c39398546fe21b65dcc73a5db8e0b91ce'\nfor name,s in json.loads(gzip.decompress(data)).items():Path(name).write_text(s)\nPYCODE"
         },
         {
+          "name": "Apply only the Gamer-Pro receive timing change",
+          "run": "set -eu\nprintf '%s  %s\\n' '663fec20a1bb8a799f7b883adcc4d09dc02e8ca60d60760e352abe2b7e23abee' 'modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv' | sha256sum -c -\ngit apply <<'LLAPI_PATCH'\n--- a/modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv\n+++ b/modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv\n@@ -521,10 +521,10 @@\n         end\n \n \t\t// Allow the actual byte-sync edge to arrive before falling back.\n-\t\t// Ignore early edges belonging to the preceding final data bit.\n+\t\t// Compatibility test: accept the legacy inter-byte edge window.\n \t\tSTATE_READ_WAIT: begin // the space between the bytes\n \t\t\tif (cycle > ((TIME_SYNC_H + TIME_SYNC_L) * 2) ||\n-\t\t\t\t((cycle > TIME_SYNC_H) && ~old_data && data_in)) begin // Re align during wait if needed\n+\t\t\t\t((cycle > 21'd25) && ~old_data && data_in)) begin // Re align during wait if needed\n \t\t\t\tcycle <= 0;\n \t\t\t\tread_bit <= 3'h0;\n \t\t\t\tif (read_byte >= read_length) state <= STATE_READ_END; else state <= STATE_READ;\nLLAPI_PATCH\nprintf '%s  %s\\n' '5debdd904cf8c6b2995e393f6519ae45075241073eb526a2b843e373bb3c19df' 'modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv' | sha256sum -c -\n"
+        },
+        {
           "name": "Configure 1943 controls",
           "run": "set -eu\ncat >> cores/1943/cfg/macros.def <<'EOF'\n\n[mister]\nJTFRAME_BUTTONS=3\nJTFRAME_LLAPI_HOLD_AUTOFIRE\nJTFRAME_LLAPI\nJTFRAME_NO_DB15\nJTFRAME_SNAC_PCE_NES\nJTFRAME_ENHANCED_CONTROLS\nJTFRAME_LLAPI_HIDE_DIAGNOSTICS\nEOF\nsed -e 's@cores/1944/mister@cores/1943/mister@g' -e 's/jt1944/jt1943/g' tests/llapi/check-1944-timing.py > tests/llapi/check-1943-timing.py\nsed -e 's/jtcore 1944 /jtcore 1943 /g' -e 's/jt1944/jt1943/g' -e 's/check-1944/check-1943/g' -e '/^mkdir -p pilot-build/,$d' tests/llapi/build-1944.sh > tests/llapi/build-1943.sh\n"
         },
@@ -72,12 +76,12 @@
         },
         {
           "name": "Verify menu and package 1943",
-          "run": "python3 - <<'PYMENU'\nfrom pathlib import Path\ndata=bytes.fromhex(Path('cores/1943/mister/cfgstr.hex').read_text())\nfor entry in [b'HCP3OO,Immediate Repoll,On,Off;',b'HCP3-,LLAPI Driver: 0.5.0;',b'-,Enhanced Core: 1.0;']:\n assert entry in data,entry\nassert b'TO CHANGE CONTROLLER' not in data\nfor entry in [b'P2,Autofire;', b'D7P2O8,P1 Autofire,Off,Hold;', b'D7P2ON,P2 Autofire,Off,Hold;', b'P1 Speed,Normal,Slow,Fast;', b'P2 Speed,Normal,Slow,Fast;']:\n assert entry in data,entry\nPYMENU\nmkdir -p install/_Arcade/cores\ncp release/mister/jt1943.rbf install/_Arcade/cores/jt1943_llapi10.rbf\ncurl -fsSL --retry 3 'https://raw.githubusercontent.com/jotego/jtbin/a1486684eed33a6c54f20bb445c313aed4fa6d56/mra/1943%20The%20Battle%20of%20Midway%20%28Euro%29.mra' -o /tmp/1943.mra\npython3 - <<'PYMRA'\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\np=Path('/tmp/1943.mra').read_bytes()\nroot=ET.fromstring(p)\nassert root.findtext('rbf')=='jt1943' and root.findtext('setname')=='1943'\nassert root.find('buttons').get('count')=='2'\nassert root.find('buttons').get('names').startswith('Shoot,Bomb,')\nassert b'<name>1943: The Battle of Midway (Euro)</name>' in p\nPath('install/_Arcade/1943.mra').write_bytes(p.replace(b'<rbf>jt1943</rbf>', b'<rbf>jt1943_llapi10</rbf>').replace(b'<name>1943: The Battle of Midway (Euro)</name>', b'<name>1943</name>'))\nPYMRA\n(cd install && sha256sum _Arcade/cores/*.rbf _Arcade/*.mra > SHA256SUMS)\n"
+          "run": "python3 - <<'PYMENU'\nfrom pathlib import Path\ndata=bytes.fromhex(Path('cores/1943/mister/cfgstr.hex').read_text())\nfor entry in [b'HCP3OO,Immediate Repoll,On,Off;',b'HCP3-,LLAPI Driver: 0.5.0;',b'-,Enhanced Core: 1.0;']:\n assert entry in data,entry\nassert b'TO CHANGE CONTROLLER' not in data\nfor entry in [b'P2,Autofire;', b'D7P2O8,P1 Autofire,Off,Hold;', b'D7P2ON,P2 Autofire,Off,Hold;', b'P1 Speed,Normal,Slow,Fast;', b'P2 Speed,Normal,Slow,Fast;']:\n assert entry in data,entry\nPYMENU\nmkdir -p \"install/_LLAPI Tests/cores\"\ncp release/mister/jt1943.rbf \"install/_LLAPI Tests/cores/jt1943gpa.rbf\"\ncurl -fsSL --retry 3 'https://raw.githubusercontent.com/jotego/jtbin/a1486684eed33a6c54f20bb445c313aed4fa6d56/mra/1943%20The%20Battle%20of%20Midway%20%28Euro%29.mra' -o /tmp/1943.mra\npython3 - <<'PYMRA'\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\np=Path('/tmp/1943.mra').read_bytes()\nroot=ET.fromstring(p)\nassert root.findtext('rbf')=='jt1943' and root.findtext('setname')=='1943'\nassert root.find('buttons').get('count')=='2'\nassert root.find('buttons').get('names').startswith('Shoot,Bomb,')\nassert b'<name>1943: The Battle of Midway (Euro)</name>' in p\nPath('install/_LLAPI Tests/1943 - Gamer-Pro Test.mra').write_bytes(p.replace(b'<rbf>jt1943</rbf>', b'<rbf>jt1943gpa</rbf>').replace(b'<name>1943: The Battle of Midway (Euro)</name>', b'<name>1943 - Gamer-Pro Test</name>'))\nPYMRA\n(cd install && sha256sum \"_LLAPI Tests/cores/jt1943gpa.rbf\" \"_LLAPI Tests/1943 - Gamer-Pro Test.mra\" > SHA256SUMS)\n"
         },
         {
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "1943-Enhanced-1.0",
+            "name": "1943-Gamer-Pro-Level-Shifter-Test",
             "path": "install/",
             "if-no-files-found": "error"
           }
@@ -87,7 +91,7 @@
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
             "name": "1943-build-reports",
-            "path": "pilot-reports/"
+            "path": "pilot-reports/\ncores/1943/mister/output_files/*.rbf\ncores/1943/mister/output_files/*.summary\n"
           }
         }
       ]
