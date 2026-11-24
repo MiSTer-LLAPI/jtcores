@@ -55,6 +55,7 @@ jobs:
           export ROM="$JTROOT/rom" POCKET="$JTFRAME/target/pocket"
           mkdir -p "$JTBIN"
           export MRA="$JTBIN/mra" JTUTIL="$JTBIN"
+          python3 "$support/credits/creditos_pausa.py" "$JTFRAME"
           (cd "$JTFRAME/src/jtframe" && go build -o "$JTBIN/jtframe" .)
           cd "$JTBIN"
           ./jtframe cfgstr wwfss --target=mister --nodbg
