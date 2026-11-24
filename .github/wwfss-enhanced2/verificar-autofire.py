@@ -135,7 +135,7 @@ def main():
     if not args.tb and (args.manual_only or int(defines["JTFRAME_BUTTONS"]) not in (2, 3)):
         raise ValueError("supply --tb for this manual-only or nonstandard control map")
     bench = args.tb or Path(__file__).with_name("autofire_tb.sv")
-    sources = [hdl / name for name in ("jtframe_serial_arcade.sv", "jtframe_llapi_arcade.sv",
+    sources = [hdl / name for name in ("jtframe_serial_arcade.sv", "jtframe_snac_turbo.sv", "jtframe_llapi_arcade.sv",
                                       "jtframe_llapi_protocol.sv", "joydb15.v")]
     with tempfile.TemporaryDirectory() as directory:
         image = Path(directory) / "test.vvp"
