@@ -1,0 +1,181 @@
+diff --git a/modules/jtframe/target/mister/cfg/files.yaml b/modules/jtframe/target/mister/cfg/files.yaml
+index d34b7a3..beff145 100644
+--- a/modules/jtframe/target/mister/cfg/files.yaml
++++ b/modules/jtframe/target/mister/cfg/files.yaml
+@@ -17,6 +17,7 @@ jtframe/target/mister:
+   - when: [ JTFRAME_LLAPI ]
+     get:
+       - jtframe_serial_arcade.sv
++      - jtframe_snac_turbo.sv
+       - jtframe_llapi_arcade.sv
+       - jtframe_llapi_protocol.sv
+       - llapi_arcade.sdc
+diff --git a/modules/jtframe/target/mister/cfgstr b/modules/jtframe/target/mister/cfgstr
+index f9024b7..93120ed 100644
+--- a/modules/jtframe/target/mister/cfgstr
++++ b/modules/jtframe/target/mister/cfgstr
+@@ -58,9 +58,9 @@ D9P2ORS,P2 Speed,Normal,Slow,Fast;
+ P2-,Repeats: Shoot;
+ P2-,LLAPI: BTN4 / SNES: X;
+ P2-,Saturn X / MD6 X;
+-P2-,MD3: manual only;
++P2-,SNAC: hold button + Start x3;
+ P2-,DB15: D;
+-P2-,NES/PCE: manual only;
++P2-,Repeat to turn turbo off;
+ P3,CONTROLLER GUIDE;
+ HCP3-,SERIAL CONNECTION: LLAPI 2P;
+ hCP3-,CONNECTION: SNAC PROTOCOL;
+@@ -89,7 +89,7 @@ HCP3-,LLAPI Driver: 1.0.0;
+ {{ end }}
+ R0,Reset;
+ {{ if .JTFRAME_ENHANCED_CONTROLS }}
+--,Enhanced Core: 2.0;
++-,Enhanced Core: 2.1;
+ {{ if not .JTFRAME_LLAPI_HIDE_DIAGNOSTICS }}
+ HCP4,LLAPI DIAGNOSTICS;
+ P4-,LLAPI DRIVER: V1.0.0;
+diff --git a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+index acb7d34..7dc422b 100644
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -92,16 +92,35 @@ module jtframe_serial_arcade #(parameter BUTTONS=3)(
+     wire snac_selected=stable && active_sys!=0 && active_sys<=6;
+     wire db15_selected=stable && active_sys==3;
+     wire dual_snac=stable && (active_sys==3 || active_sys==4 || active_sys==6);
++    wire inhibit;
++    (* async_reg="true" *) reg vblank_meta=0, vblank_sys=0;
++    reg previous_vblank=0;
++    always @(posedge clk_sys) begin
++        vblank_meta <= vblank;
++        vblank_sys <= vblank_meta;
++        previous_vblank <= vblank_sys;
++    end
++    wire snac_frame_tick = vblank_sys && !previous_vblank;
++    wire [6:0] snac_game1, snac_game2;
++    wire [1:0] snac_start, db_menu;
++    jtframe_snac_turbo #(.BUTTONS(BUTTONS)) turbo1(
++        .clk(clk_sys), .reset(rst), .selected(snac_selected), .frame_tick(snac_frame_tick),
++        .osd(inhibit), .pad(pad_sys), .game_pad(snac_game1),
++        .game_start(snac_start[0]), .db15_menu(db_menu[0]));
++    jtframe_snac_turbo #(.BUTTONS(BUTTONS)) turbo2(
++        .clk(clk_sys), .reset(rst), .selected(dual_snac), .frame_tick(snac_frame_tick),
++        .osd(inhibit), .pad(pad2_sys), .game_pad(snac_game2),
++        .game_start(snac_start[1]), .db15_menu(db_menu[1]));
+     wire snac_menu=snac_selected && (db15_selected ?
+-        ((pad_sys[7] && pad_sys[6]) || (pad2_sys[7] && pad2_sys[6])) :
++        (|db_menu) :
+         ((pad_sys[2] && pad_sys[7] && pad_sys[4]) ||
+          ((active_sys==4 || active_sys==6) && pad2_sys[2] && pad2_sys[7] && pad2_sys[4])));
+-    wire inhibit=osd_active || snac_menu;
++    assign inhibit=osd_active || snac_menu;
+     wire [15:0] raw_joy1,raw_joy2;
+     assign raw_joy1=!stable ? usb1 : !snac_selected ? llapi_joy1 :
+-                 inhibit ? 16'd0 : {9'd0,pad_sys[6:0]};
++                 inhibit ? 16'd0 : {9'd0,snac_game1};
+     assign raw_joy2=!stable ? usb2 : dual_snac ?
+-                 (inhibit ? 16'd0 : {9'd0,pad2_sys[6:0]}) :
++                 (inhibit ? 16'd0 : {9'd0,snac_game2}) :
+                  snac_selected ? usb1 : llapi_joy2;
+ `ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
+     (* async_reg="true" *) reg [1:0] snac_af_meta=0,snac_af_sys=0;
+@@ -140,8 +159,8 @@ module jtframe_serial_arcade #(parameter BUTTONS=3)(
+     assign joy1=raw_joy1;assign joy2=raw_joy2;
+ `endif
+     assign start=!stable ? 4'd0 : !snac_selected ? llapi_start :
+-                 {2'd0,dual_snac && pad2_sys[7] && !inhibit,
+-                  pad_sys[7] && (!pad_sys[8] || db15_selected) && !inhibit};
++                 {2'd0,dual_snac && snac_start[1] && !inhibit,
++                  snac_start[0] && (!pad_sys[8] || db15_selected) && !inhibit};
+     assign coin=!stable ? 4'd0 : !snac_selected ? llapi_coin :
+                  {2'd0,dual_snac && pad2_sys[8] && !inhibit,pad_sys[8] && !inhibit};
+     assign osd_request=stable && (snac_selected ? snac_menu : llapi_osd);
+diff --git a/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv b/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv
+new file mode 100644
+index 0000000..9b097a4
+--- /dev/null
++++ b/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv
+@@ -0,0 +1,83 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// One physical SNAC player. Only game actions can be programmed.
++// A Start pressed alongside the action remains available for game/menu chords.
++module jtframe_snac_turbo #(parameter BUTTONS = 3)(
++    input clk, reset, selected, frame_tick, osd,
++    input [8:0] pad,
++    output [6:0] game_pad,
++    output game_start,
++    output db15_menu
++);
++    localparam [2:0] ACTION_MASK = BUTTONS >= 3 ? 3'b111 :
++                                     BUTTONS == 2 ? 3'b011 : 3'b001;
++    wire [2:0] actions = pad[6:4];
++    wire single = (actions == 1 || actions == 2 || actions == 4) &&
++                  |(actions & ACTION_MASK);
++    wire start = pad[7];
++    // Directions and coin can take part in the original menu/coin shortcuts.
++    wire candidate = single && !pad[8] && !pad[2];
++    reg [2:0] prev_actions, programmed;
++    reg prev_start, reserved, valid_press, prev_sample, stable_down;
++    reg [1:0] taps;
++    reg [4:0] menu_hold;
++    wire same_button = actions == prev_actions;
++    wire reserve = prev_start ? reserved : candidate && same_button;
++    wire gesture_down = start && candidate && same_button &&
++                        (!prev_start || valid_press);
++    assign game_start = start && !reserve;
++    // Original DB15 chord works immediately with Start first or both
++    // together. Holding it also opens the menu when button 3 was first.
++    assign db15_menu = start && pad[6] && (!reserve || &menu_hold);
++
++    always @(posedge clk) begin
++        if (reset || !selected || osd) begin
++            prev_actions <= 0;
++            prev_start <= 0;
++            reserved <= 0;
++            valid_press <= 0;
++            taps <= 0;
++            prev_sample <= 0;
++            stable_down <= 0;
++            menu_hold <= 0;
++            if (reset || !selected) programmed <= 0;
++        end else begin
++            prev_actions <= actions;
++            prev_start <= start;
++            if (!start || !pad[6]) menu_hold <= 0;
++            else if (frame_tick && !(&menu_hold)) menu_hold <= menu_hold + 1'b1;
++
++            if (start && !prev_start) begin
++                reserved <= candidate && same_button;
++                valid_press <= candidate && same_button;
++            end else if (!start || !same_button || !candidate) valid_press <= 0;
++
++            if (!candidate || !same_button) begin
++                taps <= 0;
++                prev_sample <= 0;
++                stable_down <= 0;
++            end else if (frame_tick) begin
++                prev_sample <= gesture_down;
++                if (gesture_down && prev_sample) stable_down <= 1;
++                if (!start && !prev_sample && stable_down) begin
++                    stable_down <= 0;
++                    if (taps == 2) begin
++                        programmed <= programmed ^ actions;
++                        taps <= 0;
++                    end else taps <= taps + 1'b1;
++                end
++            end
++        end
++    end
++
++    wire [2:0] fire;
++    genvar i;
++    generate for (i=0; i<3; i=i+1) begin : action
++        reg [1:0] phase;
++        always @(posedge clk) begin
++            if (reset || !selected || osd || !actions[i] || !programmed[i]) phase <= 0;
++            else if (frame_tick) phase <= phase + 1'b1;
++        end
++        assign fire[i] = actions[i] && (!programmed[i] || !phase[1] || game_start);
++    end endgenerate
++    assign game_pad = {fire, pad[3:0]};
++endmodule
