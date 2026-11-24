@@ -20,3 +20,7 @@ The second header byte selects the orientation variant for Vulgus set 2 and Hige
 ## Catalogue scope
 
 After timing and artifact verification, the initial catalogue addition uses the nine new setnames. They are `higemaru`, `vulgus`, `vulgusj`, `vulgusa`, `mach9`, `1942a`, `1942b`, `1942w` and `1942h`. The full CI archive also contains the upstream entry for setname `1942` for verification. Its existing catalogue entry and RBF are retained for the later release migration.
+
+## Pre-build test
+
+Revision `74cf9e2b3cd20cb97ece4fa2b80f86b6f3f98fd1` passed the cabinet simulation for all three board IDs, including Vulgus set 2 with its alternate orientation header. The tests covered both players, all six SNAC interfaces and the extended ACK cases with repoll enabled and disabled.
