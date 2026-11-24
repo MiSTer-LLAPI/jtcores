@@ -122,8 +122,8 @@ index da9430f..4bda903 100644
          `endif
 +        `ifdef JTFRAME_ENHANCED_CONTROLS
 +            if (ENHANCED_PAUSE_CREDITS) show_credits <= locked | (~dip_pause & status[12]);
-+            // Never draw the credits behind OSD text.
-+            if( osd_shown ) show_credits <= 0;
++            // The Enhanced option also applies when opening the OSD pauses the game.
++            if( osd_shown && !ENHANCED_PAUSE_CREDITS ) show_credits <= 0;
 +        `endif
      end
  
