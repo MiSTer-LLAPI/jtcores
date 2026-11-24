@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = ea0ef4e973a0010cc697090196251c4962846814
+          git config submodule.modules/jt680x/crasm.url https://github.com/colinbourassa/crasm.git
           git submodule update --init --recursive --depth 1 modules/fx68k modules/jt680x/crasm
           support="$GITHUB_WORKSPACE/.github/cal50-enhanced2"
           git apply --check "$support/enhanced.patch"
