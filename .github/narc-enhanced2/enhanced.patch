@@ -2809,3 +2809,252 @@ new file mode 100644
                              autofire_hold <= {1'b0, sat_in[2:0]==3'b100 && !sat_extra[2]};
                              if(sat_in[2:0]==3'b100) begin
                                  pad[3:0]<=~{sat_dir[0],sat_dir[1],sat_dir[2],sat_dir[3]};
+--- a/cores/narc/cfg/macros.def
++++ b/cores/narc/cfg/macros.def
+@@ -47,3 +47,6 @@
+ JTFRAME_CREDITS=1
+ JTFRAME_CREDITS_DEFAULT_OFF
+ JTFRAME_LLAPI_SIX_ACTIONS
++JTFRAME_LLAPI_HOLD_AUTOFIRE
++JTFRAME_LLAPI_AUTOFIRE_OPTIONS
++JTFRAME_NARC_AUTOFIRE
+--- a/modules/jtframe/target/mister/cfgstr
++++ b/modules/jtframe/target/mister/cfgstr
+@@ -46,16 +46,18 @@
+ {{ if .JTFRAME_DIAL }}              o03,Sensitivity,high,highest,lowest,low;{{end}}
+ {{ if .JTFRAME_LLAPI }} oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P{{ if .JTFRAME_SNAC_PCE_NES }},PCE 1P,NES 2P{{ end }};
+ {{ if .JTFRAME_ENHANCED_CONTROLS }}
+-P2,Autofire;
++H7P2,Autofire;
+ P1OT,Pause dim,Off,On;
+-D7P2O8,P1 Autofire,Off,Hold;
++HAP2O8,P1 Autofire,Off,Hold;
+ 
+-D8P2OPQ,P1 Speed,Normal,Slow,Fast;
+-D7P2ON,P2 Autofire,Off,Hold;
++HAD8P2OPQ,P1 Speed,Normal,Slow,Fast;
++HBP2ON,P2 Autofire,Off,Hold;
+ 
+-D9P2ORS,P2 Speed,Normal,Slow,Fast;
++HBD9P2ORS,P2 Speed,Normal,Slow,Fast;
+ 
+-P2-,NES/PCE: manual only;
++HCP2-,SNES: R / Saturn: BTN10;
++hCP2-,SNES: R / DB15: F;
++hCP2-,Saturn / MD6: Z;
+ P3,CONTROLLER GUIDE;
+ HCP3-,SERIAL CONNECTION: LLAPI 2P;
+ hCP3-,CONNECTION: SNAC PROTOCOL;
+--- a/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
+@@ -192,11 +192,26 @@
+ `endif
+ 
+ `ifdef JTFRAME_LLAPI_HOLD_AUTOFIRE
++`ifdef JTFRAME_NARC_AUTOFIRE
++    // Only grant a shortcut to identified controllers with a distinct sixth input.
++    // Digital Saturn BTN10 and SNES R are unused by all five actions and Start/Coin.
++    (* async_reg="true" *) reg [1:0] snes_meta=0,snes_sync=0;
++    always @(posedge clk_sys) begin
++        if (rst) begin snes_meta<=0; snes_sync<=0; end
++        else begin
++            snes_meta<={valid2 && type2==8'd27, valid1 && type1==8'd27};
++            snes_sync<=snes_meta;
++        end
++    end
++    assign autofire_hold[0]=valid1_sync && ((snes_sync[0] && buttons1_sync[7]) || (saturn1_sync && buttons1_sync[9]));
++    assign autofire_hold[1]=valid2_sync && ((snes_sync[1] && buttons2_sync[7]) || (saturn2_sync && buttons2_sync[9]));
++`else
+     // Bit3 is unused by the existing arcade map (bits0..2 are game buttons).
+     // Current SNES reference maps it to X; Genesis six-button maps it to Y.
+     // Keep the already-tested bit2 autofire alias only in two-button cores.
+     assign autofire_hold={valid2_sync && (buttons2_sync[3] || (BUTTONS<3 && buttons2_sync[2])),
+                           valid1_sync && (buttons1_sync[3] || (BUTTONS<3 && buttons1_sync[2]))};
++`endif
+ `else
+     assign autofire_hold=0;
+ `endif
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -6,6 +6,9 @@
+ module jtframe_serial_arcade #(parameter BUTTONS=3)(
+     input clk_50,clk_sys,rst,vblank,osd_active,repoll_off,
+     input autofire_enable,autofire_toggle,
++`ifdef JTFRAME_NARC_AUTOFIRE
++    output md6_available,
++`endif
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     input autofire_enable2,autofire_toggle2,
+     input [1:0] autofire_rate1,autofire_rate2,
+@@ -62,6 +65,12 @@
+         ,.last_fault_reason(last_fault_reason),.type_changed(llapi_type_changed)
+ `endif
+     );
++`ifdef JTFRAME_NARC_AUTOFIRE
++    wire md6_detected;
++    (* async_reg="true" *) reg md6_meta=0,md6_info=0;
++    always @(posedge info_clk) begin md6_meta<=md6_detected; md6_info<=md6_meta; end
++    assign md6_available=md6_info;
++`endif
+     wire [8:0] snac_pad,snac_pad2;
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
+     wire [2:0] snac_extra1,snac_extra2;
+@@ -72,6 +81,9 @@
+         .user_in(user_in),.user_out(snac_out),.pad(snac_pad),.pad2(snac_pad2),.autofire_hold(snac_af)
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
+         ,.extra1(snac_extra1),.extra2(snac_extra2)
++`ifdef JTFRAME_NARC_AUTOFIRE
++        ,.md6_detected(md6_detected)
++`endif
+ `endif
+     );
+     // Only one mux drives the physical connector. Inactive readers cannot
+@@ -138,8 +150,14 @@
+     // Two-button SNAC pads have no spare autofire control. Never consume manual fire.
+     wire autofire_available=active_sys==0 || active_sys==2 || active_sys==3 || active_sys==4 || active_sys==1;
+     wire effective_autofire=autofire_enable && autofire_available;
++`ifdef JTFRAME_NARC_AUTOFIRE
++    // The sixth SNAC action is free; actions 1..5 keep their manual bindings.
++    wire [1:0] held=stable && !inhibit ?
++        (active_sys==0 ? llapi_af : autofire_available ? {dual_snac && extra2_sys[2],extra1_sys[2]} : 2'b0) : 2'b0;
++`else
+     wire [1:0] held=stable && !inhibit ?
+         (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && BUTTONS!=2)) ? snac_af_sys : active_sys==1 && BUTTONS==2 ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
++`endif
+     wire fire1,fire2;
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     wire [1:0] clear_af={2{!stable}} | ({2{active_sys==0}} & (~llapi_connected | llapi_type_changed));
+@@ -178,6 +196,9 @@
+     output reg [8:0] pad=0,pad2=0
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
+     ,output reg [2:0] extra1=0,extra2=0
++`ifdef JTFRAME_NARC_AUTOFIRE
++    ,output reg md6_detected=0
++`endif
+ `endif
+ );
+     (* async_reg="true" *) reg [6:0] input_meta=7'h7f,input_sync=7'h7f;
+@@ -203,6 +224,9 @@
+         if(!enable || mode==0 || mode>5 || mode!=old_mode) begin
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
+             extra1<=0; extra2<=0;
++`ifdef JTFRAME_NARC_AUTOFIRE
++            md6_detected<=0;
++`endif
+ `endif
+             autofire_hold<=0; ticks<=0; phase<=0; user_out<=7'h7f; pad<=0; pad2<=0;
+             nes<=8'hff;nes2<=8'hff;pce_dir<=4'hf;pce_buttons<=4'hf;
+@@ -282,6 +306,9 @@
+                         7: begin
+                             user_out[4]<=1;
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
++`ifdef JTFRAME_NARC_AUTOFIRE
++                            md6_detected<=md_valid && md_six;
++`endif
+                             extra1<=md_valid && md_six ? ~{md_extra[0],md_extra[1],md_extra[2]} : 3'd0;
+ `endif
+                             // MD6 X is separate from ABC/Mode/Start and only
+--- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
+@@ -423,6 +423,17 @@
+ `endif
+ wire [3:0] enhanced_last_fault;
+ `endif
++`ifdef JTFRAME_NARC_AUTOFIRE
++wire md6_available;
++function automatic narc_llapi_trigger(input [9:0] port_info);
++    narc_llapi_trigger=(port_info[9:8]==1) && (port_info[7:0]==8'd3 || port_info[7:0]==8'd27);
++endfunction
++wire [2:0] narc_protocol=status[63:61];
++wire narc_dual=narc_protocol==3 || narc_protocol==4;
++wire narc_af1=narc_protocol==0 ? narc_llapi_trigger(enhanced_controller_info[9:0]) :
++              narc_dual || narc_protocol==1 || (narc_protocol==2 && md6_available);
++wire narc_af2=narc_protocol==0 ? narc_llapi_trigger(enhanced_controller_info[19:10]) : narc_dual;
++`endif
+ wire [15:0] status_menumask; // a high value hides the menu item
+ wire        vertical, db15_osd_combo_en;
+ 
+@@ -447,7 +458,10 @@
+ `else
+        status_menumask[12] = 0,
+ `endif
+-`ifdef JTFRAME_ENHANCED_CONTROLS
++`ifdef JTFRAME_NARC_AUTOFIRE
++       status_menumask[11] = !narc_af2,
++       status_menumask[10] = !narc_af1,
++`elsif JTFRAME_ENHANCED_CONTROLS
+        status_menumask[11] = dip_pause,
+        status_menumask[10] = !enhanced_loss_paused,
+ `else
+@@ -460,7 +474,9 @@
+        status_menumask[9] = 0,
+        status_menumask[8] = ~(db15_en | uart_en),
+ `endif
+-`ifdef JTFRAME_LLAPI_AUTOFIRE_OPTIONS
++`ifdef JTFRAME_NARC_AUTOFIRE
++       status_menumask[7] = !(narc_af1 || narc_af2),
++`elsif JTFRAME_LLAPI_AUTOFIRE_OPTIONS
+        status_menumask[7] = status[63:61]>=5,
+ `elsif JTFRAME_CRT480I
+        status_menumask[7] = ~crt_on,
+@@ -547,6 +563,9 @@
+     .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+     .repoll_off(status[24]),.mode(status[63:61]),.db15_drive(db15_en),
+     .autofire_enable(status[8]),.autofire_toggle(1'b0),
++`ifdef JTFRAME_NARC_AUTOFIRE
++    .md6_available(md6_available),
++`endif
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     .loss_resume(status[30]),.loss_paused(enhanced_loss_paused),.loss_countdown(enhanced_loss_countdown),.loss_players(enhanced_loss_players),
+     .autofire_enable2(status[23]),.autofire_toggle2(1'b0),
+--- a/modules/jtframe/target/mister/syn/llapi_arcade.sdc
++++ b/modules/jtframe/target/mister/syn/llapi_arcade.sdc
+@@ -1,11 +1,11 @@
+ # Cut asynchronous input sampling only; the second stages remain timed.
+-set llapi_meta [get_registers -nowarn {*|u_llapi|change_meta[*] *|u_llapi|buttons1_meta[*] *|u_llapi|buttons2_meta[*] *|u_llapi|valid1_meta *|u_llapi|valid2_meta *|u_llapi|rst50_meta *|u_llapi|osd50_meta *|u_llapi|u_port1|new_sync *|u_llapi|u_port2|new_sync}]
++set llapi_meta [get_registers -nowarn {*|u_llapi|snes_meta[*] *|u_llapi|saturn1_meta *|u_llapi|saturn2_meta *|u_llapi|change_meta[*] *|u_llapi|buttons1_meta[*] *|u_llapi|buttons2_meta[*] *|u_llapi|valid1_meta *|u_llapi|valid2_meta *|u_llapi|rst50_meta *|u_llapi|osd50_meta *|u_llapi|u_port1|new_sync *|u_llapi|u_port2|new_sync}]
+ if {[get_collection_size $llapi_meta] > 0} {
+     set_false_path -to $llapi_meta
+ }
+ 
+ # First sampling stages of the optional SNAC bridge only.
+-set serial_meta [get_registers -nowarn {*|u_serial|mode_meta[*] *|u_serial|pad_meta[*] *|u_serial|pad2_meta[*] *|u_serial|active_meta[*] *|u_serial|ready_meta *|u_serial|u_snac|input_meta[*]}]
++set serial_meta [get_registers -nowarn {*|u_serial|md6_meta *|u_serial|extra1_meta[*] *|u_serial|extra2_meta[*] *|u_serial|mode_meta[*] *|u_serial|pad_meta[*] *|u_serial|pad2_meta[*] *|u_serial|active_meta[*] *|u_serial|ready_meta *|u_serial|u_snac|input_meta[*]}]
+ if {[get_collection_size $serial_meta] > 0} {
+     set_false_path -to $serial_meta
+ }
+--- a/modules/jtframe/target/mister/hdl/sys/hps_io.sv
++++ b/modules/jtframe/target/mister/hdl/sys/hps_io.sv
+@@ -1224,8 +1224,13 @@
+  p2=index>=80;column=index-(p2 ? 80:56);port_info=p2 ? info[19:10] : info[9:0];
+  if(mode==0)begin
+  if(port_info[9:8]!=1)line_text=p2 ? "P2: NOT CONNECTED       " : "P1: NOT CONNECTED       ";
++`ifdef JTFRAME_NARC_AUTOFIRE
++ else if(port_info[7:0]==3)line_text=p2 ? "P2 COIN:BTN7 START:START" : "P1 COIN:BTN7 START:START";
++ else line_text=p2 ? "P2 COIN:BTN5 START:BTN6 " : "P1 COIN:BTN5 START:BTN6 ";
++`else
+  else if(port_info[7:0]==3)line_text=p2 ? "P2 COIN:R START:START   " : "P1 COIN:R START:START   ";
+  else line_text=p2 ? "P2 COIN:BTN5 START:BTN7 " : "P1 COIN:BTN5 START:BTN6 ";
++`endif
+  end else if(p2 && mode!=3 && mode!=4 && mode!=6)line_text="P2: NOT AVAILABLE       ";
+  else case(mode)
+  1:line_text="P1 COIN:L START:START   ";
+@@ -1235,11 +1240,18 @@
+  end else begin
+  column=index-104;
+  case(mode)
++`ifdef JTFRAME_NARC_AUTOFIRE
++ 0:line_text="HOLD: SNES R / SAT BTN10";
++ 1,2:line_text="HOLD: SATURN / MD6 Z    ";
++ 3:line_text="HOLD: DB15 F            ";
++ 4:line_text="HOLD: SNES R            ";
++`else
+  0:line_text="AUTOFIRE: LLAPI BTN4    ";
+  1:line_text="AUTOFIRE: A             ";
+  4:line_text="AUTOFIRE: X             ";
+  2:line_text="AUTOFIRE: MD3 C / MD6 X ";
+  3:line_text="AUTOFIRE: D             ";
++`endif
+  default:line_text="AUTOFIRE: UNAVAILABLE   ";
+  endcase
+  end

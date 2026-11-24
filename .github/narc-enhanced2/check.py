@@ -16,7 +16,10 @@ def menu(path, crt):
     for text in (
         b'-,Enhanced Core: 2.0',b'HCP3-,LLAPI Driver: 1.0.0',b'HCP3-,Immediate Repoll: On',
         b'OC,Show credits on pause,Off,On',
-        b'P3,CONTROLLER GUIDE',
+        b'P3,CONTROLLER GUIDE', b'H7P2,Autofire',
+        b'HAP2O8,P1 Autofire,Off,Hold', b'HBP2ON,P2 Autofire,Off,Hold',
+        b'HAD8P2OPQ,P1 Speed,Normal,Slow,Fast', b'HBD9P2ORS,P2 Speed,Normal,Slow,Fast',
+        b'HCP2-,SNES: R / Saturn: BTN10', b'hCP2-,SNES: R / DB15: F', b'hCP2-,Saturn / MD6: Z',
         b'oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P,PCE 1P,NES 2P',
     ):
         assert text in entries, text

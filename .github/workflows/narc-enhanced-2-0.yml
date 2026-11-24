@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pocket-gal-enhanced-2-0
+  group: narc-enhanced-2-0
   cancel-in-progress: false
 jobs:
   candidate:
@@ -39,7 +39,7 @@ jobs:
           git apply --whitespace=nowarn "$support/enhanced.patch"
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-narc.sh" "$support/check-narc-timing.py" tests/llapi/
-      - name: Simulate two-button controls, serial modes, Controller Guide, and pause credits
+      - name: Simulate NARC controls and independent autofire, serial modes, Controller Guide, and pause credits
         run: |
           if ! command -v iverilog >/dev/null; then
             sudo apt-get update -qq
