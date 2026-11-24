@@ -1,0 +1,70 @@
+name: RoboCop Enhanced 2.0
+on:
+  push:
+    branches: [test-cop-enhanced-2-0]
+    paths:
+      - '.github/workflows/cop-enhanced-2-0.yml'
+      - '.github/cop-enhanced2/**'
+permissions:
+  contents: read
+concurrency:
+  group: pocket-gal-enhanced-2-0
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/cop-enhanced2
+      - name: Check out official RoboCop release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: ea0ef4e973a0010cc697090196251c4962846814
+          path: jtcores
+          persist-credentials: false
+      - name: Verify official base and apply RoboCop integration
+        working-directory: jtcores
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = ea0ef4e973a0010cc697090196251c4962846814
+          git submodule update --init --recursive --depth 1 modules/fx68k modules/jt6295 modules/jtopl modules/jt12
+          support="$GITHUB_WORKSPACE/.github/cop-enhanced2"
+          git apply --check "$support/enhanced.patch"
+          git apply --whitespace=nowarn "$support/enhanced.patch"
+          mkdir -p tests/llapi pilot-reports
+          cp "$support/build-cop.sh" "$support/check-cop-timing.py" tests/llapi/
+      - name: Simulate two-button controls, serial modes, Controller Guide, and pause credits
+        run: |
+          if ! command -v iverilog >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y iverilog
+          fi
+          bash .github/cop-enhanced2/simulate.sh jtcores
+      - name: Compile RoboCop and verify all timing categories
+        working-directory: jtcores
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash -v "$PWD:/jtcores" -w /jtcores "$BUILD_IMAGE" -ec '
+            quartus_sh --version | tee pilot-reports/quartus-version.txt
+            grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+            bash tests/llapi/build-cop.sh'
+      - name: Verify generated menu and package all official variants
+        run: |
+          python3 .github/cop-enhanced2/check.py menu jtcores/cores/cop/mister/cfgstr.hex
+          python3 .github/cop-enhanced2/check.py package jtcores install
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: RoboCop-Enhanced-2.0
+          path: install/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: RoboCop-Enhanced-2.0-reports
+          path: jtcores/pilot-reports/
+          if-no-files-found: warn
