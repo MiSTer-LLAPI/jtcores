@@ -1,4 +1,5 @@
 name: WWF Superstars Enhanced 2.1
+run-name: WWF Superstars Enhanced 2.1 / LLAPI 1.0.0
 on:
   push:
     branches: [test-wwfss-enhanced-2-1]
