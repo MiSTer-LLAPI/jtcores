@@ -46,7 +46,7 @@ module credit_select_tb;
             for (p=0;p<2;p=p+1) for(o=0;o<2;o=o+1) begin
                 pause_n=!p; osd=o;
                 repeat(3) @(negedge clk);
-                expected=i[0] && p && !o;
+                expected=i[0] && p;
                 if(credits_visible!==expected) $fatal(1,"Credits visibility mismatch, frame=%d pause=%d osd=%d",i,p,o);
             end
         end

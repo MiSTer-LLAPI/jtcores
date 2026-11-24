@@ -43,7 +43,7 @@ fixture="""module check_credits;
 `endif
       if(EFFECTIVE_FIXED) raw=locked || (!dip_pause && status[12]);
 `ifdef JTFRAME_ENHANCED_CONTROLS
-      if(osd_shown) raw=0;
+      if(osd_shown && !EFFECTIVE_FIXED) raw=0;
 `endif
 `ifdef JTFRAME_CHEAT
       expected=raw || vram_ctrl[0];

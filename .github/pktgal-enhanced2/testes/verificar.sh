@@ -21,7 +21,7 @@ for repoll_off in 0 1; do
     vvp "$tmp/dual"
     iverilog -g2012 -s verify_gp_mux -DJTFRAME_ENHANCED_FIXED_OPTIONS -DJTFRAME_ENHANCED_CONTROLS -DJTFRAME_LLAPI_HOLD_AUTOFIRE \
         -DJTFRAME_SNAC_PCE_NES "-Pverify_gp_mux.REPOLL_OFF=$repoll_off" -o "$tmp/seletor" \
-        "$src/jtframe_llapi_protocol.sv" "$src/jtframe_llapi_arcade.sv" "$src/jtframe_serial_arcade.sv" \
+        "$src/jtframe_llapi_protocol.sv" "$src/jtframe_llapi_arcade.sv" "$src/jtframe_serial_arcade.sv" "$src/jtframe_snac_turbo.sv" \
         "$src/joydb15.v" "$ref/stock_arcade.sv" "$ref/stock_serial.sv" "$ref/gpa_fixture.sv" \
         "$test_dir/seletor_snac_tb.sv"
     vvp "$tmp/seletor"

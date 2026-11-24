@@ -14,9 +14,9 @@ def menu(path, crt):
     assert len(data) == 2048
     entries = data.rstrip(b'\x00').split(b';')
     for text in (
-        b'-,Enhanced Core: 2.0',b'HCP3-,LLAPI Driver: 1.0.0',b'HCP3-,Immediate Repoll: On',
+        b'-,Enhanced Core: 2.1',b'HCP3-,LLAPI Driver: 1.0.0',b'HCP3-,Immediate Repoll: On',
         b'OC,Show credits on pause,Off,On',b'D7P2O8,P1 Autofire,Off,Hold',
-        b'D7P2ON,P2 Autofire,Off,Hold',b'P2-,NES/PCE: manual only',b'P3,CONTROLLER GUIDE',
+        b'D7P2ON,P2 Autofire,Off,Hold',b'P2-,SNAC: hold button + Start x3',b'P3,CONTROLLER GUIDE',
         b'oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P,PCE 1P,NES 2P',
     ):
         assert text in entries, text
