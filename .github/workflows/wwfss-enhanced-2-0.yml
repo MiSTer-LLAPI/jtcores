@@ -1,0 +1,86 @@
+name: WWF Superstars Enhanced 2.0
+on:
+  push:
+    branches: [test-wwfss-enhanced-2-0]
+    paths:
+      - '.github/workflows/wwfss-enhanced-2-0.yml'
+      - '.github/wwfss-enhanced2/**'
+permissions:
+  contents: read
+concurrency:
+  group: wwfss-enhanced-2-0
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/wwfss-enhanced2
+      - name: Check out official WWF Superstars release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          path: jtcores
+          persist-credentials: false
+      - name: Verify official base and apply WWF Superstars integration
+        working-directory: jtcores
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          git submodule update --init --recursive --depth 1 modules/fx68k modules/jt51 modules/jt6295
+          support="$GITHUB_WORKSPACE/.github/wwfss-enhanced2"
+          git apply --check "$support/enhanced.patch"
+          git apply --whitespace=nowarn "$support/enhanced.patch"
+          mkdir -p tests/llapi pilot-reports
+          cp "$support/build-wwfss.sh" "$support/check-wwfss-timing.py" tests/llapi/
+      - name: Verify generated menu and simulate WWF Superstars controls
+        run: |
+          if ! command -v iverilog >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y iverilog
+          fi
+          set -euo pipefail
+          support="$PWD/.github/wwfss-enhanced2"
+          export JTROOT="$PWD/jtcores" JTFRAME="$PWD/jtcores/modules/jtframe"
+          export CORES="$JTROOT/cores" MODULES="$JTROOT/modules"
+          export JTBIN="$RUNNER_TEMP/wwfss-test" RLS="$RUNNER_TEMP/wwfss-test"
+          export ROM="$JTROOT/rom" POCKET="$JTFRAME/target/pocket"
+          mkdir -p "$JTBIN"
+          export MRA="$JTBIN/mra" JTUTIL="$JTBIN"
+          (cd "$JTFRAME/src/jtframe" && go build -o "$JTBIN/jtframe" .)
+          cd "$JTBIN"
+          ./jtframe cfgstr wwfss --target=mister --nodbg
+          ./jtframe cfgstr wwfss --target=mister --nodbg --output=quartus > defines.qsf
+          python3 "$support/verificar-autofire.py" cfgstr.hex defines.qsf "$JTFRAME/target/mister/hdl/jtframe_mister.sv" --tb "$support/autofire_tb.sv"
+      - name: Compile WWF Superstars and verify all timing categories
+        working-directory: jtcores
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash -v "$PWD:/jtcores" -w /jtcores "$BUILD_IMAGE" -ec '
+            quartus_sh --version | tee pilot-reports/quartus-version.txt
+            grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+            bash tests/llapi/build-wwfss.sh'
+      - name: Verify compiled menu and stage the candidate
+        run: |
+          project="jtcores/cores/wwfss/mister"
+          python3 .github/wwfss-enhanced2/verificar-autofire.py "$project/cfgstr.hex" "$project/jtwwfss.qsf" jtcores/modules/jtframe/target/mister/hdl/jtframe_mister.sv --static-only
+          mkdir -p install
+          test -s jtcores/release/mister/jtwwfss.rbf
+          cp jtcores/release/mister/jtwwfss.rbf install/jtwwfss_llapi20.rbf
+          sha256sum install/jtwwfss_llapi20.rbf
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Double-Dribble-Enhanced-2.0
+          path: install/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: Double-Dribble-Enhanced-2.0-reports
+          path: jtcores/pilot-reports/
+          if-no-files-found: warn
