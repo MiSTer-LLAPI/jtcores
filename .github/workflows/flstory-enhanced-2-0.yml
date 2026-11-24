@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pocket-gal-enhanced-2-0
+  group: flstory-enhanced-2-0
   cancel-in-progress: false
 jobs:
   candidate:
@@ -55,6 +55,9 @@ jobs:
             bash tests/llapi/build-flstory.sh'
       - name: Verify generated menu and package all official variants
         run: |
+          project="jtcores/cores/flstory/mister"
+          python3 .github/flstory-enhanced2/verificar-autofire.py "$project/cfgstr.hex" "$project/jtflstory.qsf" \
+            jtcores/modules/jtframe/target/mister/hdl/jtframe_mister.sv --static-only
           python3 .github/flstory-enhanced2/check.py menu jtcores/cores/flstory/mister/cfgstr.hex
           python3 .github/flstory-enhanced2/check.py package jtcores install
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

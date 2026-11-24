@@ -2809,3 +2809,213 @@ new file mode 100644
                              autofire_hold <= {1'b0, sat_in[2:0]==3'b100 && !sat_extra[2]};
                              if(sat_in[2:0]==3'b100) begin
                                  pad[3:0]<=~{sat_dir[0],sat_dir[1],sat_dir[2],sat_dir[3]};
+--- a/cores/flstory/cfg/macros.def
++++ b/cores/flstory/cfg/macros.def
+@@ -45,3 +45,6 @@
+ JTFRAME_CREDITS=1
+ JTFRAME_CREDITS_DEFAULT_OFF
+ JTFRAME_LLAPI_SIX_ACTIONS
++JTFRAME_LLAPI_HOLD_AUTOFIRE
++JTFRAME_LLAPI_AUTOFIRE_OPTIONS
++JTFRAME_FLSTORY_AUTOFIRE
+--- a/modules/jtframe/target/mister/cfgstr
++++ b/modules/jtframe/target/mister/cfgstr
+@@ -29,7 +29,7 @@
+                                     H1P1O2,Rotate screen,Yes,No;
+     {{ end }}
+ {{ end }}
+-{{ if .JTFRAME_LIGHTGUN }} H6O8,Sinden Lightgun,Off,On;
++{{ if .JTFRAME_LIGHTGUN }} {{ if .JTFRAME_ENHANCED_CONTROLS }}H6OV{{ else }}H6O8{{ end }},Sinden Lightgun,Off,On;
+                            H6O9,Sinden Crosshair,Off,On;
+                            H6o03,Lightgun Sensitivity,high,highest,lowest,low;{{ end }}
+ P1oEF,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;
+@@ -55,7 +55,10 @@
+
+ D9P2ORS,P2 Speed,Normal,Slow,Fast;
+
+-P2-,NES/PCE: manual only;
++{{ if .JTFRAME_FLSTORY_AUTOFIRE }}
++h7P2-,Manual fire only;
++H7P2-,{{printf "\u00e8\u00e9\u00ea\u00eb\u00ec\u00ed\u00ee\u00ef\u00f0\u00f1\u00f2\u00f3\u00f4\u00f5\u00f6\u00f7\u00f8\u00f9\u00fa\u00fb\u00fc\u00fd\u00fe\u00ff"}};
++{{ else }}P2-,NES/PCE: manual only;{{ end }}
+ P3,CONTROLLER GUIDE;
+ HCP3-,SERIAL CONNECTION: LLAPI 2P;
+ hCP3-,CONNECTION: SNAC PROTOCOL;
+--- a/modules/jtframe/target/mister/hdl/jtframe_mister_status.v
++++ b/modules/jtframe/target/mister/hdl/jtframe_mister_status.v
+@@ -39,7 +39,11 @@
+
+ // Sinden Lightgun white borders
+ `ifdef JTFRAME_LIGHTGUN
++`ifdef JTFRAME_ENHANCED_CONTROLS
++assign gun_border_en = status[31];
++`else
+ assign gun_border_en = status[8];
++`endif
+ `else
+ assign gun_border_en = 1'b0;
+ `endif
+@@ -49,3 +53,23 @@
+ assign ram_load = status[22];
+
+ endmodule
++
++`ifdef JTFRAME_FLSTORY_AUTOFIRE
++// The loaded ROM header selects the cabinet, including on the DDR download path.
++module jtflstory_autofire_profile(
++    input clk_rom, clk_sys, ioctl_rom, ioctl_wr,
++    input [26:0] ioctl_addr,
++    input [7:0] ioctl_dout,
++    output reg six_button_cab = 1, six_button_sys = 1
++);
++always @(posedge clk_rom) begin
++    if (ioctl_rom && ioctl_wr && ioctl_addr == 27'd6)
++        six_button_cab <= ioctl_dout[1];
++end
++(* async_reg="true" *) reg six_button_meta = 1;
++always @(posedge clk_sys) begin
++    six_button_meta <= six_button_cab;
++    six_button_sys <= six_button_meta;
++end
++endmodule
++`endif
+--- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
+@@ -254,6 +254,12 @@
+ wire        force_scan2x, direct_video;
+ wire        video_rotated;
+ wire        lightgun_en;
++wire        gun_border_selected;
++`ifdef JTFRAME_ENHANCED_CONTROLS
++assign gun_border_en = gun_border_selected && lightgun_en;
++`else
++assign gun_border_en = gun_border_selected;
++`endif
+
+ `ifdef JTFRAME_CRT480I
+ wire [18:0] core_mod;
+@@ -365,7 +371,7 @@
+     .hsize_scale    ( hsize_scale    ),
+     .ram_save       ( ram_save       ),
+     .ram_load       ( ram_load       ),
+-    .gun_border_en  ( gun_border_en  ),
++    .gun_border_en  ( gun_border_selected ),
+     .uart_en        ( uart_en        )
+ );
+
+@@ -423,6 +429,16 @@
+ `endif
+ wire [3:0] enhanced_last_fault;
+ `endif
++`ifdef JTFRAME_FLSTORY_AUTOFIRE
++wire six_button_cab, six_button_sys;
++jtflstory_autofire_profile u_af_profile(
++    .clk_rom(clk_rom), .clk_sys(clk_sys), .ioctl_rom(ioctl_rom), .ioctl_wr(ioctl_wr),
++    .ioctl_addr(ioctl_addr), .ioctl_dout(ioctl_dout),
++    .six_button_cab(six_button_cab), .six_button_sys(six_button_sys)
++);
++`else
++wire six_button_cab = 0, six_button_sys = 0;
++`endif
+ wire [15:0] status_menumask; // a high value hides the menu item
+ wire        vertical, db15_osd_combo_en;
+
+@@ -461,7 +477,7 @@
+        status_menumask[8] = ~(db15_en | uart_en),
+ `endif
+ `ifdef JTFRAME_LLAPI_AUTOFIRE_OPTIONS
+-       status_menumask[7] = status[63:61]>=5,
++       status_menumask[7] = status[63:61]>=5 || six_button_cab,
+ `elsif JTFRAME_CRT480I
+        status_menumask[7] = ~crt_on,
+ `else
+@@ -546,10 +562,10 @@
+ jtframe_serial_arcade #(.BUTTONS(BUTTONS)) u_serial(
+     .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+     .repoll_off(status[24]),.mode(status[63:61]),.db15_drive(db15_en),
+-    .autofire_enable(status[8]),.autofire_toggle(1'b0),
++    .autofire_enable(status[8] && !six_button_sys),.autofire_toggle(1'b0),
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     .loss_resume(status[30]),.loss_paused(enhanced_loss_paused),.loss_countdown(enhanced_loss_countdown),.loss_players(enhanced_loss_players),
+-    .autofire_enable2(status[23]),.autofire_toggle2(1'b0),
++    .autofire_enable2(status[23] && !six_button_sys),.autofire_toggle2(1'b0),
+     .autofire_rate1(status[26:25]),.autofire_rate2(status[28:27]),
+     .info_clk(clk_rom),.controller_info(enhanced_controller_info),.link_diagnostics(enhanced_link_diagnostics),
+     .last_fault_reason(enhanced_last_fault),
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -48,7 +48,14 @@
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     wire [1:0] llapi_type_changed;
+ `endif
+-    jtframe_llapi_arcade #(.BUTTONS(BUTTONS)) u_llapi(.repoll_off(repoll_off),
++    // With flstory, Hold is enabled only for the loaded two-button cabinet.
++    localparam AF_TWO_BUTTONS =
++`ifdef JTFRAME_FLSTORY_AUTOFIRE
++        1;
++`else
++        BUTTONS == 2;
++`endif
++    jtframe_llapi_arcade #(.BUTTONS(BUTTONS),.AF_TWO_BUTTONS(AF_TWO_BUTTONS)) u_llapi(.repoll_off(repoll_off),
+         .clk_50(clk_50),.clk_sys(clk_sys),.rst(rst),.vblank(vblank),
+         .enable(ready50 && mode50==0),.osd_active(osd_active),
+         .user_in(user_in),.user_out(llapi_out),.usb1(usb1),.usb2(usb2),
+@@ -67,7 +74,7 @@
+     wire [2:0] snac_extra1,snac_extra2;
+ `endif
+     wire [2:0] reader_mode=mode50==1 ? 3 : mode50==2 ? 2 : mode50==4 ? 1 : mode50==5 ? 4 : mode50==6 ? 5 : 0;
+-    jtframe_snac_arcade #(.BUTTONS(BUTTONS)) u_snac(.clk_50(clk_50),
++    jtframe_snac_arcade #(.BUTTONS(BUTTONS),.AF_TWO_BUTTONS(AF_TWO_BUTTONS)) u_snac(.clk_50(clk_50),
+         .enable(ready50 && reader_mode!=0),.mode(reader_mode),
+         .user_in(user_in),.user_out(snac_out),.pad(snac_pad),.pad2(snac_pad2),.autofire_hold(snac_af)
+ `ifdef JTFRAME_LLAPI_SIX_ACTIONS
+@@ -139,7 +146,7 @@
+     wire autofire_available=active_sys==0 || active_sys==2 || active_sys==3 || active_sys==4 || active_sys==1;
+     wire effective_autofire=autofire_enable && autofire_available;
+     wire [1:0] held=stable && !inhibit ?
+-        (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && BUTTONS!=2)) ? snac_af_sys : active_sys==1 && BUTTONS==2 ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
++        (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && !AF_TWO_BUTTONS)) ? snac_af_sys : active_sys==1 && AF_TWO_BUTTONS ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
+     wire fire1,fire2;
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     wire [1:0] clear_af={2{!stable}} | ({2{active_sys==0}} & (~llapi_connected | llapi_type_changed));
+@@ -167,7 +174,8 @@
+ module jtframe_snac_arcade #(
+     parameter BUTTONS=3,
+     parameter TICK_CYCLES=500, // 10 us at 50 MHz; shortened only in simulation
+-    parameter SCAN_TICKS=250  // 2.5 ms; allows MD six-button timeout to reset
++    parameter SCAN_TICKS=250, // 2.5 ms; allows MD six-button timeout to reset
++    parameter AF_TWO_BUTTONS=(BUTTONS==2)
+ )(
+     input clk_50,enable,
+     input [2:0] mode, // 1 SNES, 2 Mega Drive, 3 Saturn digital, 4 PCE, 5 NES
+@@ -286,7 +294,7 @@
+ `endif
+                             // MD6 X is separate from ABC/Mode/Start and only
+                             // valid after the extension handshake; MD3 has no X.
+-                            autofire_hold<={1'b0,md_valid && (md_six ? !md_extra[2] : BUTTONS==2 && !md_high[5])};
++                            autofire_hold<={1'b0,md_valid && (md_six ? !md_extra[2] : AF_TWO_BUTTONS && !md_high[5])};
+                             if(md_valid) begin
+                                 pad[3:0]<=~{md_high[0],md_high[1],md_high[2],md_high[3]};
+                                 pad[6:4]<=~{md_high[5],md_as[0],md_high[4]}; // C,A,B => buttons 3,2,1
+--- a/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_llapi_arcade.sv
+@@ -3,7 +3,7 @@
+ // Protocol implementation and arcade button IDs originate in
+ // MiSTer-LLAPI/Arcade-IremM62_MiSTer, commit 4d637039.
+ module jtframe_llapi_arcade #(
+-    parameter BUTTONS=3, LOSS_MS=1000
++    parameter BUTTONS=3, LOSS_MS=1000, AF_TWO_BUTTONS=(BUTTONS<3)
+ )(
+     input clk_50, clk_sys, rst, vblank, osd_active, enable, repoll_off,
+     input [6:0] user_in,
+@@ -195,8 +195,8 @@
+     // Bit3 is unused by the existing arcade map (bits0..2 are game buttons).
+     // Current SNES reference maps it to X; Genesis six-button maps it to Y.
+     // Keep the already-tested bit2 autofire alias only in two-button cores.
+-    assign autofire_hold={valid2_sync && (buttons2_sync[3] || (BUTTONS<3 && buttons2_sync[2])),
+-                          valid1_sync && (buttons1_sync[3] || (BUTTONS<3 && buttons1_sync[2]))};
++    assign autofire_hold={valid2_sync && (buttons2_sync[3] || (AF_TWO_BUTTONS && buttons2_sync[2])),
++                          valid1_sync && (buttons1_sync[3] || (AF_TWO_BUTTONS && buttons1_sync[2]))};
+ `else
+     assign autofire_hold=0;
+ `endif

@@ -15,4 +15,17 @@ iverilog -g2012 -DJTFRAME_LLAPI_SIX_ACTIONS -s six_actions_tb -o "$temp/six" "$s
 vvp "$temp/six"
 iverilog -g2012 -DJTFRAME_LLAPI_SIX_ACTIONS -s snac_readers_tb -o "$temp/six-snac" "$support/six_actions_snac_tb.sv" "$hdl/jtframe_serial_arcade.sv"
 vvp "$temp/six-snac"
+export JTROOT="$core" JTFRAME="$base" CORES="$core/cores" MODULES="$core/modules"
+export JTBIN="$temp" RLS="$temp" MRA="$temp/mra" ROM="$core/rom" POCKET="$base/target/pocket" JTUTIL="$temp"
+(cd "$JTFRAME/src/jtframe" && go build -o "$temp/jtframe" .)
+controls="$core/pilot-reports/controls"
+mkdir -p "$controls"
+(
+    cd "$controls"
+    "$temp/jtframe" cfgstr flstory -t mister --nodbg
+    "$temp/jtframe" cfgstr flstory -t mister --nodbg -o quartus > effective.qsf
+)
+python3 "$support/check.py" menu "$controls/cfgstr.hex"
+python3 "$support/verificar-autofire.py" "$controls/cfgstr.hex" "$controls/effective.qsf" \
+    "$hdl/jtframe_mister.sv" --tb "$support/autofire_tb.sv"
 sh "$temp/testes/verificar.sh" 

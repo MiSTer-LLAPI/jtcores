@@ -16,7 +16,9 @@ def menu(path, crt):
     for text in (
         b'-,Enhanced Core: 2.0',b'HCP3-,LLAPI Driver: 1.0.0',b'HCP3-,Immediate Repoll: On',
         b'OC,Show credits on pause,Off,On',
-        b'P3,CONTROLLER GUIDE',
+        b'P3,CONTROLLER GUIDE', b'H6OV,Sinden Lightgun,Off,On',
+        b'D7P2O8,P1 Autofire,Off,Hold', b'D7P2ON,P2 Autofire,Off,Hold',
+        b'h7P2-,Manual fire only', b'H7P2-,'+bytes(range(232,256)),
         b'oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P,PCE 1P,NES 2P',
     ):
         assert text in entries, text
@@ -43,6 +45,8 @@ def mras(dest=None):
         assert x.findtext('rbf') == 'jtflstory'
         buttons=x.find('buttons').attrib
         six=setname=='victnine'
+        header=bytes.fromhex(x.find("rom[@index='0']/part").text)
+        assert bool(header[6] & 2) == six
         assert buttons['count']==('6' if six else '2')
         assert buttons['default']==('A,B,X,Y,L,R,Start,Select,L2,R2,L3' if six else 'A,B,Start,Select,L2,R2,L3')
         assert b'jtbeta.zip' not in raw and raw.count(b'<rbf>jtflstory</rbf>') == 1
