@@ -1,0 +1,22 @@
+setname,official_mra,rom_asm_md5,rom_recipe_sha256,action,existing_catalogue_path,matching_identifiers
+aliens,_Arcade/Aliens (World set 1).mra,c29784def287afe117fd37d4a22bd15b,9b0af519814ae2ffa457649fe41ec3abd8d96388a5874d9e53f7b52a6dd86261,preserve existing,_SNAC+LLAPI Enhanced/_Arcade/Aliens.mra,"asm_md5,recipe,setname"
+crimfght,_Arcade/Crime Fighters (World 2 players).mra,018a0aec8cbe50afaedfd79ba469d0da,8c2fcaec46d9c8114ad229ee156f15951c345a3d1cd973d0f3e841622ead5018,new entry,,
+gbusters,_Arcade/Gang Busters (set 1).mra,69f39be4c77b0e399d273efddacbb7ef,3fde9b07147eb7fff8739bdcff44e3fc9f855f95c51c70d7640a1a19bdddd2d9,new entry,,
+scontra,_Arcade/Super Contra (set 1).mra,afbdf81f150f42e9f5fcb6125a941bab,1610034e9109e71f5df764482303cc99297fdba322e3fedfe28d99060c92a12a,preserve existing,_SNAC+LLAPI Enhanced/_Arcade/Super Contra.mra,"asm_md5,recipe,setname"
+thunderx,_Arcade/Thunder Cross (set 1).mra,0594600f554d6dcc0221fafa84a3b0e7,580b45ac5b86f0914aa6446b94365c197113f8f7ababeefee7d95a7b24e3d339,new entry,,
+aliensa,_Arcade/_alternatives/_Aliens/Aliens (Asia).mra,6a9a9bb2588e06c5717e172595ae8f5b,7fedd0fd3720f0a78824cd3c9db26d228afa458644a0aeff995c70b633c65f90,new entry,,
+aliensj,_Arcade/_alternatives/_Aliens/Aliens (Japan set 1).mra,62f796a4fda1e5aa73abad65dc8b9656,07e31db2074dd602257ef59cb6c0ff981adba4da3ac80399dd31b6c6edd3e1ba,new entry,,
+aliensj2,_Arcade/_alternatives/_Aliens/Aliens (Japan set 2).mra,580fba2da02b54c3ea8fd259edaa87be,1b40e6276d0e7b10419e7b1ba2e10e618ee6219e4375cc6cae127aa7537584ee,new entry,,
+aliensu,_Arcade/_alternatives/_Aliens/Aliens (US).mra,7458d38926ecc5f7048a72e34c06f27b,a4df41e6cc4c485f23ec180b80788da78d4970f978a2401f263e269c80d479ac,new entry,,
+aliens2,_Arcade/_alternatives/_Aliens/Aliens (World set 2).mra,66642a81c5f21f1ae9c62348e8882e07,bc0889caad2b596a44c2b353d3dad958811ccef531ba4741f7fd65e481f8d3dc,new entry,,
+aliens3,_Arcade/_alternatives/_Aliens/Aliens (World set 3).mra,93902f225a0f6a89e6853fecbf2e3444,ed9ab951ed45704c04bc2686674f34c087270d2352fdc2e9cdbd9fd3b2476332,new entry,,
+aliens4,_Arcade/_alternatives/_Aliens/Aliens (World set 4).mra,740b7c941c1890c6fa59fe837af8dd69,fe6e83e1b00d318ace15848c44be63ff9a2d3ab188948af20ba17e80f5009fb3,new entry,,
+crimfghtj,_Arcade/_alternatives/_Crime Fighters/Crime Fighters (Japan 2 Players).mra,e5f3ee44b1ecbdedf36cc725124fb684,af9eaddd9f795a1e8213289e508373dbbbc33178aae4d99674f040bf4cbaf78f,new entry,,
+crimfghtu,_Arcade/_alternatives/_Crime Fighters/Crime Fighters (US 4 Players).mra,eb0b57afbe65732cb4236f73674ad6d8,d745d092172bb94b538c6ab83c4f7151c3454318b28876efdd120b6defde1b26,new entry,,
+crazycop,_Arcade/_alternatives/_Gang Busters/Crazy Cop (Japan).mra,39d21b4af425422761915d26d39c2456,50930b2644ebfbefb9efd5c733ea1ca4f8b3b10c28f38b1bf01881e74de765d6,new entry,,
+gbustersa,_Arcade/_alternatives/_Gang Busters/Gang Busters (set 2).mra,f7bfbd3eb253a98777797a40dfbffd4b,8ea2187fbc8c449779ee590594373506b9c9c0a620f1d4d48a5ac1e1dd3f67c0,new entry,,
+scontraa,_Arcade/_alternatives/_Super Contra/Super Contra (set 2).mra,caaf9472724cc67b3590a9e9a97847ee,9c75c23573a69f881eb54cddb5e478ec5bea383053033f73b10c07b525f120a8,new entry,,
+scontraj,_Arcade/_alternatives/_Super Contra/Super Contra Alien no Gyakushuu (Japan).mra,34697a2a2870c83d36aba5c59b0b9369,8a3f42d132ac7dc7cc44b85867f6edd6a65a788d45f245c3d86886e33ecbd75e,new entry,,
+thunderxj,_Arcade/_alternatives/_Thunder Cross/Thunder Cross (Japan).mra,fc142741174d357de72455ece57a393b,36c90b9ecba938e8f6bc5e5a56a75181fb72bf40a2549c102fa69d816f6dd3a6,new entry,,
+thunderxa,_Arcade/_alternatives/_Thunder Cross/Thunder Cross (set 2).mra,1e86c04a144ee7ad642464a831bb3ad6,60d4c5b0c1d6d34ff43b6f97871cf1f0927e47aa722ac9d986f63ab4a16e9d2a,new entry,,
+thunderxb,_Arcade/_alternatives/_Thunder Cross/Thunder Cross (set 3).mra,47d6dae5b024554e216f6fb2a9743e52,0ffbd905b9985132b13a2cd60a44b9b4cda024b7b11cc07bf5abb4effc43a3b1,new entry,,
