@@ -20,7 +20,17 @@ mkdir -p "$controls"
     cd "$controls"
     "$temp/jtframe" cfgstr s18 -t mister --nodbg
     "$temp/jtframe" cfgstr s18 -t mister --nodbg -o quartus > effective.qsf
+    "$temp/jtframe" mem s18 --target mister --local --nodbg
     "$temp/jtframe" files syn s18 -t mister --local
+    python3 - <<'CHECK_FILES'
+from pathlib import Path
+entries = [line.split(maxsplit=3)[3] for line in Path("files.qip").read_text().splitlines()
+           if line.startswith("set_global_assignment -name ")]
+missing = [entry for entry in entries if not Path(entry).is_file()]
+if not entries or missing:
+    raise SystemExit(f"Unresolved System 18 project files: {missing}")
+print(f"System 18 synthesis project resolves all {len(entries)} file entries.")
+CHECK_FILES
     for file in fx68k.sv jt8051.v jt12.v jts18_main.v jts16b_mapper.v jtshanon_coldac.v jt4701.v jtframe_serial_arcade.sv jtframe_snac_turbo.sv jtframe_llapi_arcade.sv jtframe_llapi_protocol.sv llapi_arcade.sdc; do
         grep -F "/$file" files.qip >/dev/null || { echo "System 18 source missing: $file"; exit 1; }
     done
