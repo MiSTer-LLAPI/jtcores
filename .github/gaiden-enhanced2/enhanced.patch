@@ -1,8 +1,8 @@
 diff --git a/cores/gaiden/cfg/macros.def b/cores/gaiden/cfg/macros.def
-index 2363eb5..82a3d42 100644
+index 2363eb5..94574fd 100644
 --- a/cores/gaiden/cfg/macros.def
 +++ b/cores/gaiden/cfg/macros.def
-@@ -21,4 +21,15 @@ JTFRAME_IOCTL_RD+=14
+@@ -21,4 +21,17 @@ JTFRAME_IOCTL_RD+=14
  
  [mist|sidi]
  # not enough BRAM
@@ -20,6 +20,8 @@ index 2363eb5..82a3d42 100644
 +JTFRAME_CREDITS=1
 +JTFRAME_CREDITS_DEFAULT_OFF
 +JTFRAME_GAIDEN_AUTOFIRE_PROFILE
++JTFRAME_LLAPI_HOLD_AUTOFIRE
++JTFRAME_LLAPI_AUTOFIRE_OPTIONS
 diff --git a/modules/jtframe/hdl/jtframe_board.v b/modules/jtframe/hdl/jtframe_board.v
 index da9430f..b9dc14d 100644
 --- a/modules/jtframe/hdl/jtframe_board.v
@@ -2051,10 +2053,10 @@ index c45c040..0de5bf7 100644
 +`endif
 diff --git a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
 new file mode 100644
-index 0000000..17cf943
+index 0000000..8e73d3c
 --- /dev/null
 +++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
-@@ -0,0 +1,455 @@
+@@ -0,0 +1,471 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +// Optional digital SNAC readers for the 1943 LLAPI pilot.
 +// USER pin assignments follow MiSTer-devel SNES, Genesis and Saturn cores.
@@ -2241,18 +2243,34 @@ index 0000000..17cf943
 +    wire [1:0] held=stable && !inhibit ?
 +        (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && !AF_TWO_BUTTONS)) ? snac_af_sys : active_sys==1 && AF_TWO_BUTTONS ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
 +    wire fire1,fire2;
++`ifdef JTFRAME_GAIDEN_AUTOFIRE_PROFILE
++    // Raiga shoots on A. Wild Fang punches on B.
++    wire manual_fire1 = two_action_game ? raw_joy1[4] : raw_joy1[5];
++    wire manual_fire2 = two_action_game ? raw_joy2[4] : raw_joy2[5];
++`else
++    wire manual_fire1 = raw_joy1[4];
++    wire manual_fire2 = raw_joy2[4];
++`endif
 +`ifdef JTFRAME_ENHANCED_CONTROLS
 +    wire [1:0] clear_af={2{!stable}} | ({2{active_sys==0}} & (~llapi_connected | llapi_type_changed));
-+    enhanced_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,
++    enhanced_autofire af1(clk_sys,rst,vb_sync,held[0],manual_fire1,inhibit,
 +        effective_autofire,autofire_toggle,clear_af[0],autofire_rate1,fire1);
-+    enhanced_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,
++    enhanced_autofire af2(clk_sys,rst,vb_sync,held[1],manual_fire2,inhibit,
 +        autofire_enable2 && autofire_available,autofire_toggle2,clear_af[1],autofire_rate2,fire2);
 +`else
-+    selectable_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[0]),fire1);
-+    selectable_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[1]),fire2);
++    selectable_autofire af1(clk_sys,rst,vb_sync,held[0],manual_fire1,inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[0]),fire1);
++    selectable_autofire af2(clk_sys,rst,vb_sync,held[1],manual_fire2,inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[1]),fire2);
 +`endif
++
++`ifdef JTFRAME_GAIDEN_AUTOFIRE_PROFILE
++    assign joy1=two_action_game ? {raw_joy1[15:5],fire1,raw_joy1[3:0]}
++                               : {raw_joy1[15:6],fire1,raw_joy1[4:0]};
++    assign joy2=two_action_game ? {raw_joy2[15:5],fire2,raw_joy2[3:0]}
++                               : {raw_joy2[15:6],fire2,raw_joy2[4:0]};
++`else
 +    assign joy1={raw_joy1[15:5],fire1,raw_joy1[3:0]};
 +    assign joy2={raw_joy2[15:5],fire2,raw_joy2[3:0]};
++`endif
 +`else
 +    assign joy1=raw_joy1;assign joy2=raw_joy2;
 +`endif
