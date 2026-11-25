@@ -1,0 +1,119 @@
+--- a/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv
+@@ -3,6 +3,9 @@
+ // A Start pressed alongside the action remains available for game/menu chords.
+ module jtframe_snac_turbo #(parameter BUTTONS = 3)(
+     input clk, reset, selected, frame_tick, osd,
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++    input [5:0] action_mask,
++`endif
+     input [8:0] pad,
+     input [2:0] extra,
+     output [2:0] extra_fire,
+@@ -17,7 +20,12 @@
+         (1 << BUTTONS) - 1;
+ `endif
+     wire [5:0] actions = {extra, pad[6:4]};
+-    wire single = |(actions & ACTION_MASK) && (actions & (actions - 6'd1)) == 0;
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++    wire [5:0] eligible = action_mask;
++`else
++    wire [5:0] eligible = ACTION_MASK;
++`endif
++    wire single = |(actions & eligible) && (actions & (actions - 6'd1)) == 0;
+     wire start = pad[7];
+     // Directions and coin can take part in the original menu/coin shortcuts.
+     wire candidate = single && !pad[8] && !pad[2];
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -20,6 +20,9 @@
+     output [63:0] poll_timing_us,
+ `endif
+     output [3:0] last_fault_reason,
++`endif
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++    input [5:0] action_mask,
+ `endif
+     input [2:0] mode, // 0 LLAPI, 1 Saturn, 2 SEGA, 3 original DB15, 4 SNES, 5 PCE 2-button, 6 NES
+     input [6:0] user_in,
+@@ -131,11 +134,17 @@
+     wire [6:0] snac_game1, snac_game2;
+     wire [1:0] snac_start, db_menu;
+     jtframe_snac_turbo #(.BUTTONS(BUTTONS)) turbo1(
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++        .action_mask(action_mask),
++`endif
+         .clk(clk_sys), .reset(rst), .selected(snac_selected), .frame_tick(snac_frame_tick),
+         .osd(inhibit), .extra(extra1_sys), .extra_fire(game_extra1),
+         .pad(pad_sys), .game_pad(snac_game1),
+         .game_start(snac_start[0]), .db15_menu(db_menu[0]));
+     jtframe_snac_turbo #(.BUTTONS(BUTTONS)) turbo2(
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++        .action_mask(action_mask),
++`endif
+         .clk(clk_sys), .reset(rst), .selected(dual_snac), .frame_tick(snac_frame_tick),
+         .osd(inhibit), .extra(extra2_sys), .extra_fire(game_extra2),
+         .pad(pad2_sys), .game_pad(snac_game2),
+--- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
+@@ -607,7 +607,18 @@
+ `endif
+ 
+ assign show_osd=0;
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++wire [5:0] thundr_action_mask;
++jtthundr_autofire_profile u_af_profile (
++    .clk_rom(clk_rom), .clk_sys(clk_sys), .ioctl_rom(ioctl_rom),
++    .ioctl_wr(ioctl_wr), .ioctl_addr(ioctl_addr), .ioctl_dout(ioctl_dout),
++    .action_mask(thundr_action_mask)
++);
++`endif
+ jtframe_serial_arcade #(.BUTTONS(BUTTONS)) u_serial(
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++    .action_mask(thundr_action_mask),
++`endif
+     .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+     .repoll_off(status[24]),.mode(status[63:61]),.db15_drive(db15_en),
+     .autofire_enable(status[8] && !no_spare_sys),.autofire_toggle(1'b0),
+@@ -1562,3 +1573,34 @@
+     );
+ 
+ endmodule
++
++`ifdef JTFRAME_THUNDR_AUTOFIRE
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Capture official header bytes in clk_rom. The game remains in reset
++// throughout the download, and both bytes settle before gameplay begins.
++module jtthundr_autofire_profile (
++    input clk_rom, clk_sys, ioctl_rom, ioctl_wr,
++    input [26:0] ioctl_addr,
++    input [7:0] ioctl_dout,
++    output [5:0] action_mask
++);
++    reg hopping_mappy = 0;
++    reg single_action = 0;
++    always @(posedge clk_rom) begin
++        if (ioctl_rom && ioctl_wr) begin
++            if (ioctl_addr == 27'd1)
++                hopping_mappy <= ioctl_dout == 8'h0d;
++            if (ioctl_addr == 27'd2)
++                single_action <= ioctl_dout[3] || ioctl_dout[0];
++        end
++    end
++
++    wire [5:0] mask_rom = hopping_mappy || single_action ? 6'b000001 : 6'b000011;
++    (* async_reg = "true" *) reg mask_meta = 1, mask_sys = 1;
++    always @(posedge clk_sys) begin
++        mask_meta <= mask_rom[1];
++        mask_sys <= mask_meta;
++    end
++    assign action_mask = {4'b0, mask_sys, 1'b1};
++endmodule
++`endif
+--- a/cores/thundr/cfg/macros.def
++++ b/cores/thundr/cfg/macros.def
+@@ -33,3 +33,4 @@
+ JTFRAME_CREDITS=1
+ JTFRAME_CREDITS_DEFAULT_OFF
+ JTFRAME_LLAPI_EXTRA_ACTIONS
++JTFRAME_THUNDR_AUTOFIRE
