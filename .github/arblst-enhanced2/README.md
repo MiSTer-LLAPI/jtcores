@@ -9,3 +9,5 @@ The cabinet simulation drives LLAPI and SNAC through JTFRAME's real rotation and
 The workflow uses the container digest recorded in [Jotego's official Arbalester/Meta Fox MiSTer build](https://github.com/jotego/jtcores/actions/runs/42940934819/job/130262743834) and checks for Quartus Prime Lite Edition 20.1.1 Build 720. The RBF is packaged after checks on setup, hold, recovery, removal and minimum pulse width.
 
 The initial catalogue addition selects only `metafox`. The existing `Arbalester.mra` and `jtarblst_llapi10.rbf` remain on the published version until their migration.
+
+Compilação de validação de Meta Fox.
