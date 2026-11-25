@@ -378,7 +378,7 @@ index 5b8c323..beff145 100644
      get:
        - jtframe_mister_cartsave.v
 diff --git a/modules/jtframe/target/mister/cfgstr b/modules/jtframe/target/mister/cfgstr
-index f6ba6de..48dc4dc 100644
+index f6ba6de..3e4ce73 100644
 --- a/modules/jtframe/target/mister/cfgstr
 +++ b/modules/jtframe/target/mister/cfgstr
 @@ -11,8 +11,8 @@
@@ -401,13 +401,26 @@ index f6ba6de..48dc4dc 100644
                             H6O9,Sinden Crosshair,Off,On;
                             H6o03,Lightgun Sensitivity,high,highest,lowest,low;{{ end }}
  P1oEF,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;
-@@ -44,12 +44,56 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
+@@ -44,12 +44,69 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
  {{ if .JTFRAME_OSD_VOL }}           O67,FX volume,high,highest,lowest,low; {{ end }}
  {{ if .JTFRAME_OSD_TEST }}          OA,Service mode,Off,On; {{ end }}
  {{ if .JTFRAME_DIAL }}              o03,Sensitivity,high,highest,lowest,low;{{end}}
 +{{ if .JTFRAME_LLAPI }} oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P{{ if .JTFRAME_SNAC_PCE_NES }},PCE 1P,NES 2P{{ end }};
 +{{ if .JTFRAME_ENHANCED_CONTROLS }}
 +P1OT,Pause dim,Off,On;
++{{ if .JTFRAME_GAIDEN_AUTOFIRE_PROFILE }}
++P2,Autofire;
++D7P2O8,P1 Autofire,Off,Hold;
++D8P2OPQ,P1 Speed,Normal,Slow,Fast;
++D7P2ON,P2 Autofire,Off,Hold;
++D9P2ORS,P2 Speed,Normal,Slow,Fast;
++P2-,Repeats: Raiga A / Wild Fang B;
++P2-,LLAPI: BTN4 / SNES: X;
++P2-,Saturn X / MD6 X;
++P2-,DB15: D;
++P2-,SNAC: hold button + Start x3;
++P2-,Repeat to turn turbo off;
++{{ end }}
 +P3,CONTROLLER GUIDE;
 +hCP3-,SNAC: Hold action + Start x3;
 +hCP3-,Repeat to turn turbo off;
