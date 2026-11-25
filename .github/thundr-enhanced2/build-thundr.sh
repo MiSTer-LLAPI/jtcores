@@ -18,7 +18,9 @@ export PATH=/tmp/llapi-tools:$JTFRAME/bin:/usr/local/go/bin:$PATH
 mkdir -p /tmp/llapi-tools "$JTUTIL" "$JTBIN" pilot-reports
 # Set only build variables; do not source scripts that override CODEX_HOME.
 (cd "$JTFRAME/src/jtframe" && go build -o /tmp/llapi-tools/jtframe .)
-# Decode no game ROMs and use the official thundr MRAs supplied with this pilot.
+# Generate the HDL header with the official MRA generator, without assembling ROMs.
+jtframe mra --nodbg --skipROM --skipPocket thundr
+test -s cores/thundr/hdl/jtthundr_header.v
 # Strict JTFRAME timing acceptance stays enabled for all attempts.
 success=0
 for seed in 1 2 3; do
