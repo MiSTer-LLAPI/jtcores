@@ -1,0 +1,19 @@
+PASS 10 official MRA hashes, set identities and native cabinet profiles
+PASS Pang cabinet: both players, four hardware profiles, direction and action bit wiring, start, coin, service, release, EEPROM init and dial
+pang_cabinet_tb.sv:90: $finish called at 4430000 (1ps)
+PASS Select Off -> On -> Off -> On, 128-bit HPS transfers, pause/OSD visibility and forced repoll on both ports.
+creditos_select_tb.sv:54: $finish called at 1440 (1s)
+PASS: 1024 credits/OSD cases incl. existing configs, opt-out, default credits polarity, locked screen and independent cheat video.
+USER pins verified mode           1
+USER pins verified mode           2
+USER pins verified mode           3
+USER pins verified mode           4
+USER pins verified mode           5
+USER pins verified mode           6
+PASS end-to-end physical pin simulations for all six SNAC modes
+snac_wires_tb.sv:116: $finish called at 10591200 (1s)
+PASS Pang generated menu, 1414 / 2048 bytes
+PASS Pang: actual USER I/O mux to Z80, 7 modes, two-player routing, shared coin, native USB, quiz uses four answers independently, auxiliary Hold, Start x3 on/off, OSD and release
+pang_serial_tb.sv:169: $finish called at 1040000000 (1ps)
+PASS OSD selectors match Quartus definitions and the active controls wiring
+PASS: 244 files registered in the generated MiSTer synthesis project all exist.
