@@ -15,3 +15,5 @@ The LLAPI protocol and the controller mapping are byte-identical to [Ricardo's v
 The workflow pins the [Jotego source](https://github.com/jotego/jtcores/tree/8bc8172993b9b9488cb45ee8a913090fc4d9b143) and the image used in its [official MiSTer 1943 build](https://github.com/jotego/jtcores/actions/runs/42940934819/job/130262743357). The Quartus banner must report Lite Edition 20.1.1 Build 720. Tests check the CPU-visible cabinet registers, two independent players and all six SNAC modes, and compare each MRA with its official SHA-256. The RBF is packaged only after all five timing categories pass.
 
 The published `1943.mra` already loads the European `1943` set. The new catalogue addition selects the other seven setnames while retaining `1943.mra`, `jt1943_llapi10.rbf` and `1943-LLAPI-SNAC.rbf`.
+
+Compilação de validação para as variantes 1943 Kai e Mark II.
