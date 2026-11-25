@@ -1,0 +1,73 @@
+name: paroda Enhanced 2.1
+on:
+  push:
+    branches: [test-paroda-enhanced-2-1]
+    paths:
+      - '.github/workflows/paroda-enhanced-2-1.yml'
+      - '.github/paroda-enhanced2/**'
+permissions:
+  contents: read
+concurrency:
+  group: paroda-enhanced-2-1
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/paroda-enhanced2
+      - name: Check out official paroda release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          path: jtcores
+          persist-credentials: false
+      - name: Verify official base and apply paroda integration
+        working-directory: jtcores
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          git submodule update --init --recursive --depth 1 modules/jt51 modules/jtkcpu
+          support="$GITHUB_WORKSPACE/.github/paroda-enhanced2"
+          git apply --check "$support/enhanced.patch"
+          git apply --whitespace=nowarn "$support/enhanced.patch"
+          mkdir -p tests/llapi pilot-reports
+          cp "$support/build-paroda.sh" "$support/check-paroda-timing.py" tests/llapi/
+      - name: Verify official MRA profiles and simulate digital controllers
+        run: |
+          if ! command -v iverilog >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y iverilog
+          fi
+          bash .github/paroda-enhanced2/simulate.sh jtcores
+      - name: Compile paroda and verify all timing categories
+        working-directory: jtcores
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash -v "$PWD:/jtcores" -w /jtcores "$BUILD_IMAGE" -ec '
+            quartus_sh --version | tee pilot-reports/quartus-version.txt
+            grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+            bash tests/llapi/build-paroda.sh'
+      - name: Verify generated menu and package all official variants
+        run: |
+          project="jtcores/cores/paroda/mister"
+          python3 .github/paroda-enhanced2/verificar-autofire.py "$project/cfgstr.hex" "$project/jtparoda.qsf" \
+            jtcores/modules/jtframe/target/mister/hdl/jtframe_mister.sv --static-only
+          python3 .github/paroda-enhanced2/check.py menu jtcores/cores/paroda/mister/cfgstr.hex
+          python3 .github/paroda-enhanced2/check.py package jtcores install
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paroda-Enhanced-2.1
+          path: install/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: paroda-Enhanced-2.1-reports
+          path: jtcores/pilot-reports/
+          if-no-files-found: warn
