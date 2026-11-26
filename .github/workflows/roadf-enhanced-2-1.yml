@@ -1,7 +1,7 @@
-name: roadf Enhanced 2.1
+name: roadf Enhanced 2.1 LLAPI 1.2
 on:
   push:
-    branches: [test-roadf-enhanced-2-1]
+    branches: [test-roadf-llapi12]
     paths:
       - '.github/workflows/roadf-enhanced-2-1.yml'
       - '.github/roadf-enhanced2/**'
@@ -37,6 +37,7 @@ jobs:
           support="$GITHUB_WORKSPACE/.github/roadf-enhanced2"
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
+          python3 "$support/apply-llapi12.py"
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-roadf.sh" "$support/check-roadf-timing.py" tests/llapi/
       - name: Verify official MRA profiles and simulate digital controllers
