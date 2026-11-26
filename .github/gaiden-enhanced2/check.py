@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 SUPPORT = Path(__file__).resolve().parent
 STEM = 'jtgaiden_llapi21'
 SETS = {
+    "shadoww": (3, "Grab,Attack,Jump", "A,B,X", 0x00, 0),
     "stratof": (2, "button 1,button 2,-", "A,B", 0x11, 1),
     "wildfang": (3, "Jump,Punch,Change", "A,B,X", 0x01, 0),
 }
@@ -17,7 +18,7 @@ def menu(path, crt):
     assert len(data) == 2048
     entries = data.rstrip(b'\x00').split(b';')
     for text in (
-        b'P2-,SNAC: hold button + Start x3',b'P2-,Repeat to turn turbo off',b'-,Enhanced Core: 2.1',b'HCP3-,LLAPI Driver: 1.0.0',b'HCP3-,Immediate Repoll: On',
+        b'P2-,SNAC: hold button + Start x3',b'P2-,Repeat to turn turbo off',b'-,Enhanced Core: 2.1',b'HCP3-,LLAPI Driver: 1.2',b'HCP3-,Immediate Repoll: On',
         b'P2-,Saturn X / MD6 X',b'OC,Show credits on pause,Off,On',
         b'P3,CONTROLLER GUIDE',
         b'oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P,PCE 1P,NES 2P',

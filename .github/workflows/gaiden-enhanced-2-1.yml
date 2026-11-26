@@ -1,7 +1,7 @@
-name: gaiden Enhanced 2.1
+name: gaiden Enhanced 2.1 LLAPI 1.2
 on:
   push:
-    branches: [test-gaiden-enhanced-2-1]
+    branches: [test-gaiden-llapi12-shadoww]
     paths:
       - '.github/workflows/gaiden-enhanced-2-1.yml'
       - '.github/gaiden-enhanced2/**'
@@ -37,6 +37,7 @@ jobs:
           support="$GITHUB_WORKSPACE/.github/gaiden-enhanced2"
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
+          python3 "$support/apply-llapi12.py"
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-gaiden.sh" "$support/check-gaiden-timing.py" tests/llapi/
       - name: Verify official MRA profiles and simulate digital controllers
