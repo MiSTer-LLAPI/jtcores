@@ -1,11 +1,11 @@
-name: Sega System 16B Enhanced 2.1
+name: Sega System 16B Enhanced 2.1 LLAPI 1.2
 on:
   push:
-    branches: [test-s16b-enhanced-2-1]
+    branches: [test-s16b-llapi12]
 permissions:
   contents: read
 concurrency:
-  group: s16b-enhanced-2-1
+  group: s16b-enhanced-2-1-llapi12
   cancel-in-progress: false
 jobs:
   candidate:
@@ -34,6 +34,8 @@ jobs:
           support="$GITHUB_WORKSPACE/.github/s16b-enhanced2"
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
+          python3 "$support/apply-llapi12.py"
+          grep -q 'LLAPI Driver: 1.2' modules/jtframe/target/mister/cfgstr
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-s16b.sh" "$support/check-s16b-timing.py" tests/llapi/
       - name: Simulate SNAC autofire and controller routing
