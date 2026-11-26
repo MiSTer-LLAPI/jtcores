@@ -38,7 +38,7 @@ jobs:
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
           mkdir -p tests/llapi pilot-reports
-          cp "$support/build-rastan.sh" "$support/check-rastan-timing.py" tests/llapi/
+          cp "$support/build-rastan.sh" "$support/check-rastan-timing.py" "$support/gen-header.go" tests/llapi/
       - name: Validate official MRAs and simulate controller paths
         run: |
           set -euo pipefail

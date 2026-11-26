@@ -18,6 +18,8 @@ export PATH=/tmp/llapi-tools:$JTFRAME/bin:/usr/local/go/bin:$PATH
 mkdir -p /tmp/llapi-tools "$JTUTIL" "$JTBIN" pilot-reports
 # Set only build variables; do not source scripts that override CODEX_HOME.
 (cd "$JTFRAME/src/jtframe" && go build -o /tmp/llapi-tools/jtframe .)
+# The upstream TOML generates a header module that is not stored in git.
+(cd "$JTFRAME/src/jtframe" && go run /jtcores/tests/llapi/gen-header.go)
 # Decode no game ROMs and use the official rastan MRAs supplied with this pilot.
 # Strict JTFRAME timing acceptance stays enabled for all attempts.
 success=0
