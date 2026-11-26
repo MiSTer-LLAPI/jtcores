@@ -39,6 +39,10 @@ jobs:
           git apply --whitespace=nowarn "$support/enhanced-base.patch"
           git apply --check "$support/autofire-profile.patch"
           git apply "$support/autofire-profile.patch"
+          python3 "$support/apply-llapi12.py"
+          grep -q 'LLAPI Driver: 1.2' modules/jtframe/target/mister/cfgstr
+          grep -q 'wire premature_reply = command_busy' modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
+          grep -q 'A low sample breaks the high run' modules/jtframe/target/mister/hdl/jtframe_llapi_protocol.sv
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-thundr.sh" "$support/check-thundr-timing.py" tests/llapi/
       - name: Verify official MRA profiles and simulate digital controllers
@@ -66,7 +70,7 @@ jobs:
           python3 - <<'PYMENU'
           from pathlib import Path
           menu = bytes.fromhex(Path("jtcores/cores/thundr/mister/cfgstr.hex").read_text()).replace(b"_", b" ")
-          for entry in (b"Serial port,LLAPI 2P", b"Immediate Repoll: On", b"Show credits on pause,Off,On", b"CONTROLLER GUIDE", b"Hold action + Start x3"):
+          for entry in (b"Serial port,LLAPI 2P", b"LLAPI Driver: 1.2", b"Immediate Repoll: On", b"Show credits on pause,Off,On", b"CONTROLLER GUIDE", b"Hold action + Start x3"):
               assert entry in menu, entry
           PYMENU
           mkdir -p install/_Arcade/cores
