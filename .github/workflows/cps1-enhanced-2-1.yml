@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = 301596e73170828dec95162f8f03994c2ca52ec5
-          git submodule update --init --recursive --depth 1 modules/jt51 modules/jt12 modules/fx68k
+          git submodule update --init --recursive --depth 1 modules/jt51 modules/jt6295 modules/fx68k
           support="$GITHUB_WORKSPACE/.github/cps1-enhanced2"
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
