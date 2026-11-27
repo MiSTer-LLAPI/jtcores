@@ -21,7 +21,7 @@ mkdir -p /tmp/llapi-tools "$JTUTIL" "$JTBIN" pilot-reports
 # Compile the official CPS1.5 source; package the verified MRAs separately.
 # Strict JTFRAME timing acceptance stays enabled for all attempts.
 success=0
-for seed in 1 2 3; do
+for seed in 4 5 6; do
     if jtcore cps15 -mister --nodbg --nolinter --clean --seed "$seed" > "pilot-reports/seed-$seed.log" 2>&1; then
         success=1
         printf '%s\n' "$seed" > pilot-reports/accepted-seed.txt
