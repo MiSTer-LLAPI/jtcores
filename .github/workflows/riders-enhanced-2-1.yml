@@ -49,8 +49,9 @@ jobs:
           support=.github/riders-enhanced2
           hdl=jtcores/modules/jtframe/target/mister/hdl
           python3 "$support/check.py" mras
-          for profile in riders-profile riders-action riders-snac; do
+          for profile in riders-profile riders-action riders-snac riders-extra-players; do
             case "$profile" in
+              riders-extra-players) top=riders_extra_players_tb; sources="$hdl/jtframe_serial_arcade.sv";;
               riders-profile) top=riders_profile_tb; sources="$hdl/jtframe_mister_status.v";;
               riders-action) top=riders_action_tb; sources="$hdl/jtframe_serial_arcade.sv $hdl/jtframe_llapi_arcade.sv $hdl/jtframe_snac_turbo.sv $hdl/jtframe_llapi_protocol.sv $hdl/joydb15.v";;
               riders-snac) top=snac_turbo_tb; sources="$hdl/jtframe_serial_arcade.sv $hdl/jtframe_llapi_arcade.sv $hdl/jtframe_snac_turbo.sv $hdl/jtframe_llapi_protocol.sv $hdl/joydb15.v";;

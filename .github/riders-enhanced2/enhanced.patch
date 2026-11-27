@@ -377,7 +377,7 @@ index 5b8c323..beff145 100644
      get:
        - jtframe_mister_cartsave.v
 diff --git a/modules/jtframe/target/mister/cfgstr b/modules/jtframe/target/mister/cfgstr
-index f6ba6de..ad75b38 100644
+index f6ba6de..66c3c97 100644
 --- a/modules/jtframe/target/mister/cfgstr
 +++ b/modules/jtframe/target/mister/cfgstr
 @@ -11,8 +11,8 @@
@@ -400,7 +400,7 @@ index f6ba6de..ad75b38 100644
                             H6O9,Sinden Crosshair,Off,On;
                             H6o03,Lightgun Sensitivity,high,highest,lowest,low;{{ end }}
  P1oEF,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;
-@@ -44,12 +44,70 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
+@@ -44,12 +44,76 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
  {{ if .JTFRAME_OSD_VOL }}           O67,FX volume,high,highest,lowest,low; {{ end }}
  {{ if .JTFRAME_OSD_TEST }}          OA,Service mode,Off,On; {{ end }}
  {{ if .JTFRAME_DIAL }}              o03,Sensitivity,high,highest,lowest,low;{{end}}
@@ -413,6 +413,12 @@ index f6ba6de..ad75b38 100644
 +D8P2OPQ,P1 Speed,Normal,Slow,Fast;
 +D7P2ON,P2 Autofire,Off,Hold;
 +D9P2ORS,P2 Speed,Normal,Slow,Fast;
++{{ if .JTFRAME_RIDERS_AUTOFIRE_MENU }}
++P2O[80],P3 Autofire,Off,Hold;
++P2O[82:81],P3 Speed,Normal,Slow,Fast;
++P2O[83],P4 Autofire,Off,Hold;
++P2O[85:84],P4 Speed,Normal,Slow,Fast;
++{{ end }}
 +P2-,Golfing Greats: Shot;
 +P2-,Other games: first action;
 +P2-,LLAPI: BTN4 / SNES: X;
@@ -1778,7 +1784,7 @@ index 0000000..6b8837e
 +    end
 +endmodule
 diff --git a/modules/jtframe/target/mister/hdl/jtframe_mister.sv b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
-index ee89c1f..585d8ea 100644
+index ee89c1f..72528b0 100644
 --- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
 +++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
 @@ -11,6 +11,10 @@ module jtframe_mister #(parameter
@@ -1828,7 +1834,7 @@ index ee89c1f..585d8ea 100644
      .uart_en        ( uart_en        )
  );
  
-@@ -449,16 +461,76 @@ jtframe_resync u_resync(
+@@ -449,16 +461,86 @@ jtframe_resync u_resync(
  reg         framebuf_flip;      // extra OSD options for rotation, bit 0 = rotate, bit 1 = flip
  
  // OSD option visibility. This is linked to the d(D) and h(H) prefixes in cfgstr
@@ -1852,12 +1858,22 @@ index ee89c1f..585d8ea 100644
 +wire six_button_cab = 0, six_button_sys = 0;
 +`endif
 +`ifdef JTFRAME_RIDERS_AUTOFIRE_MENU
-+wire riders_af_second_cab, riders_af_second_sys;
++wire riders_af_second_cab, riders_af_second_sys, riders_four_player_sys;
 +jtriders_autofire_profile u_riders_af_profile(
 +    .clk_rom(clk_rom), .clk_sys(clk_sys), .ioctl_rom(ioctl_rom), .ioctl_wr(ioctl_wr),
 +    .ioctl_addr(ioctl_addr), .ioctl_dout(ioctl_dout),
-+    .second_action_cab(riders_af_second_cab), .second_action_sys(riders_af_second_sys)
++    .second_action_cab(riders_af_second_cab), .second_action_sys(riders_af_second_sys), .four_player_sys(riders_four_player_sys)
 +);
++`endif
++wire [15:0] cabinet_pad3, cabinet_pad4;
++`ifdef JTFRAME_RIDERS_AUTOFIRE_MENU
++riders_usb_autofire repeat_p3(clk_sys, rst, ~LVBL, OSD_STATUS, riders_af_second_sys,
++    riders_four_player_sys && hps_status_full[80], hps_status_full[82:81], joystick3, cabinet_pad3);
++riders_usb_autofire repeat_p4(clk_sys, rst, ~LVBL, OSD_STATUS, riders_af_second_sys,
++    riders_four_player_sys && hps_status_full[83], hps_status_full[85:84], joystick4, cabinet_pad4);
++`else
++assign cabinet_pad3 = joystick3;
++assign cabinet_pad4 = joystick4;
 +`endif
  wire [15:0] status_menumask; // a high value hides the menu item
  wire        vertical, db15_osd_combo_en;
@@ -1878,8 +1894,7 @@ index ee89c1f..585d8ea 100644
 +`endif
 +`ifdef JTFRAME_ENHANCED_CONTROLS
 +       status_menumask[13] = status_menumask[7] || !(status[8] || status[23]),
- `else
--       status_menumask[7]    = 0,
++`else
 +       status_menumask[13] = 0,
 +`endif
 +`ifdef JTFRAME_ENHANCED_CONTROLS
@@ -1890,7 +1905,8 @@ index ee89c1f..585d8ea 100644
 +`ifdef JTFRAME_ENHANCED_CONTROLS
 +       status_menumask[11] = dip_pause,
 +       status_menumask[10] = !enhanced_loss_paused,
-+`else
+ `else
+-       status_menumask[7]    = 0,
 +       status_menumask[11:10] = 0,
 +`endif
 +`ifdef JTFRAME_ENHANCED_CONTROLS
@@ -1909,7 +1925,7 @@ index ee89c1f..585d8ea 100644
  `endif
         status_menumask[6]    = ~lightgun_en, // sinden lightgun borders
         status_menumask[5]    = crop_ok, // video crop options
-@@ -529,7 +601,39 @@ wire [7:0] hps_din;
+@@ -529,7 +611,39 @@ wire [7:0] hps_din;
  wire [15:0] joyusb_1, joyusb_2;
  
  
@@ -1950,7 +1966,7 @@ index ee89c1f..585d8ea 100644
  assign db15_en  = status[37];
  jtframe_joymux #(.BUTTONS(BUTTONS)) u_joymux(
      .rst        ( rst       ),
-@@ -548,11 +652,6 @@ jtframe_joymux #(.BUTTONS(BUTTONS)) u_joymux(
+@@ -548,11 +662,6 @@ jtframe_joymux #(.BUTTONS(BUTTONS)) u_joymux(
      .joymux_1   ( joystick1 ),
      .joymux_2   ( joystick2 )
  );
@@ -1962,7 +1978,7 @@ index ee89c1f..585d8ea 100644
  `endif
  
  `ifdef JTFRAME_SHADOW
-@@ -718,13 +817,25 @@ end else begin: g_no_capture
+@@ -718,13 +827,25 @@ end else begin: g_no_capture
  end endgenerate
  
  hps_io #(
@@ -1988,7 +2004,7 @@ index ee89c1f..585d8ea 100644
  
      .buttons         ( buttons        ),
  `ifdef JTFRAME_CRT480I
-@@ -1011,6 +1122,11 @@ jtframe_board #(
+@@ -1011,6 +1132,11 @@ jtframe_board #(
      .SDRAMW                ( SDRAMW               ),
      .MISTER                ( 1                    )
  ) u_board(
@@ -2000,7 +2016,16 @@ index ee89c1f..585d8ea 100644
      .rst            ( rst             ),
      .rst_n          ( rst_n           ),
      .capture_pause  ( 1'b0            ),
-@@ -1059,8 +1175,13 @@ jtframe_board #(
+@@ -1052,15 +1178,20 @@ jtframe_board #(
+     .ps2_kbd_data   ( ps2_kbd_data    ),
+     .board_joystick1( joystick1       ),
+     .board_joystick2( joystick2       ),
+-    .board_joystick3( joystick3       ),
+-    .board_joystick4( joystick4       ),
++    .board_joystick3( cabinet_pad3       ),
++    .board_joystick4( cabinet_pad4       ),
+     .joy_aux_en     ( 1'b1            ),
+     .joyana_l1      ( joyana_l1       ),
      .joyana_r1      ( joyana_r1       ),
      .joyana_l2      ( joyana_l2       ),
      .joyana_r2      ( joyana_r2       ),
@@ -2014,7 +2039,7 @@ index ee89c1f..585d8ea 100644
      .game_joystick1 ( game_joystick1  ),
      .game_joystick2 ( game_joystick2  ),
      .game_joystick3 ( game_joystick3  ),
-@@ -1107,7 +1228,12 @@ jtframe_board #(
+@@ -1107,7 +1238,12 @@ jtframe_board #(
      .rotate         ( rotate          ),
      .rot_osdonly    (                 ),
      // LED
@@ -2028,10 +2053,10 @@ index ee89c1f..585d8ea 100644
      // UART
      .uart_rx        ( uart_rx         ),
 diff --git a/modules/jtframe/target/mister/hdl/jtframe_mister_status.v b/modules/jtframe/target/mister/hdl/jtframe_mister_status.v
-index c45c040..ee666b2 100644
+index c45c040..6cfae98 100644
 --- a/modules/jtframe/target/mister/hdl/jtframe_mister_status.v
 +++ b/modules/jtframe/target/mister/hdl/jtframe_mister_status.v
-@@ -38,10 +38,59 @@ assign hsize_scale  = status[52:49];
+@@ -38,10 +38,64 @@ assign hsize_scale  = status[52:49];
  assign uart_en  = status[38]; // It can be used by the cheat engine or the game
  
  // Sinden Lightgun white borders
@@ -2078,14 +2103,19 @@ index c45c040..ee666b2 100644
 +    input clk_rom, clk_sys, ioctl_rom, ioctl_wr,
 +    input [26:0] ioctl_addr,
 +    input [7:0] ioctl_dout,
-+    output reg second_action_cab = 0, second_action_sys = 0
++    output reg second_action_cab = 0, second_action_sys = 0,
++    output reg four_player_cab = 0, four_player_sys = 0
 +);
 +always @(posedge clk_rom) begin
-+    if (ioctl_rom && ioctl_wr && ioctl_addr == 27'd15)
++    if (ioctl_rom && ioctl_wr && ioctl_addr == 27'd15) begin
 +        second_action_cab <= ioctl_dout[3];
++        four_player_cab <= ioctl_dout == 8'h02 || ioctl_dout == 8'h08;
++    end
 +end
-+(* async_reg="true" *) reg second_action_meta = 0;
++(* async_reg="true" *) reg second_action_meta = 0, four_player_meta = 0;
 +always @(posedge clk_sys) begin
++    four_player_meta <= four_player_cab;
++    four_player_sys <= four_player_meta;
 +    second_action_meta <= second_action_cab;
 +    second_action_sys <= second_action_meta;
 +end
@@ -2093,10 +2123,10 @@ index c45c040..ee666b2 100644
 +`endif
 diff --git a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
 new file mode 100644
-index 0000000..0a4b7c9
+index 0000000..96c438a
 --- /dev/null
 +++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
-@@ -0,0 +1,470 @@
+@@ -0,0 +1,486 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +// Optional digital SNAC readers for the 1943 LLAPI pilot.
 +// USER pin assignments follow MiSTer-devel SNES, Genesis and Saturn cores.
@@ -2565,6 +2595,22 @@ index 0000000..0a4b7c9
 + end
 +end
 +assign fire=!rst && !inhibit && (manual_fire || (active && phase));
++endmodule
++`endif
++
++`ifdef JTFRAME_RIDERS_AUTOFIRE_MENU
++module riders_usb_autofire(
++    input clk, rst, frame, osd, second_action, enable,
++    input [1:0] rate,
++    input [15:0] pad,
++    output [15:0] game_pad
++);
++    wire held = second_action ? pad[5] : pad[4];
++    wire pulse;
++    enhanced_autofire repeat_action(clk, rst, frame, held, 1'b0, osd,
++        enable, 1'b0, 1'b0, rate, pulse);
++    wire [15:0] action_mask = second_action ? 16'h0020 : 16'h0010;
++    assign game_pad = enable ? ((pad & ~action_mask) | (pulse ? action_mask : 16'd0)) : pad;
 +endmodule
 +`endif
 diff --git a/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv b/modules/jtframe/target/mister/hdl/jtframe_snac_turbo.sv
