@@ -1,0 +1,89 @@
+name: Riders Enhanced 2.1 LLAPI 1.2
+on:
+  push:
+    branches: [test-riders-llapi12]
+    paths:
+      - '.github/workflows/riders-enhanced-2-1.yml'
+      - '.github/riders-enhanced2/**'
+permissions:
+  contents: read
+concurrency:
+  group: riders-enhanced-2-1
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/riders-enhanced2
+      - name: Check out pinned official Riders source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: 301596e73170828dec95162f8f03994c2ca52ec5
+          path: jtcores
+          persist-credentials: false
+      - name: Apply Enhanced source to official Riders core
+        working-directory: jtcores
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 301596e73170828dec95162f8f03994c2ca52ec5
+          git submodule update --init --recursive --depth 1 modules/jt51 modules/jt12 modules/fx68k
+          support="$GITHUB_WORKSPACE/.github/riders-enhanced2"
+          git apply --check "$support/enhanced.patch"
+          git apply --whitespace=nowarn "$support/enhanced.patch"
+          mkdir -p tests/llapi pilot-reports
+          cp "$support/build-riders.sh" "$support/check-riders-timing.py" tests/llapi/
+      - name: Validate official MRAs and simulate controls
+        run: |
+          set -euo pipefail
+          if ! command -v iverilog >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y iverilog
+          fi
+          support=.github/riders-enhanced2
+          hdl=jtcores/modules/jtframe/target/mister/hdl
+          python3 "$support/check.py" mras
+          for profile in riders-profile riders-action riders-snac; do
+            case "$profile" in
+              riders-profile) top=riders_profile_tb; sources="$hdl/jtframe_mister_status.v";;
+              riders-action) top=riders_action_tb; sources="$hdl/jtframe_serial_arcade.sv $hdl/jtframe_llapi_arcade.sv $hdl/jtframe_snac_turbo.sv $hdl/jtframe_llapi_protocol.sv $hdl/joydb15.v";;
+              riders-snac) top=snac_turbo_tb; sources="$hdl/jtframe_serial_arcade.sv $hdl/jtframe_llapi_arcade.sv $hdl/jtframe_snac_turbo.sv $hdl/jtframe_llapi_protocol.sv $hdl/joydb15.v";;
+            esac
+            iverilog -g2012 -DJTFRAME_ENHANCED_CONTROLS -DJTFRAME_ENHANCED_FIXED_OPTIONS \
+              -DJTFRAME_LLAPI_HOLD_AUTOFIRE -DJTFRAME_RIDERS_AUTOFIRE_MENU \
+              -s "$top" -o "/tmp/$profile" "$support/$profile-tb.sv" $sources
+            vvp -N "/tmp/$profile"
+          done
+      - name: Compile Riders and accept positive timing margins only
+        working-directory: jtcores
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash -v "$PWD:/jtcores" -w /jtcores "$BUILD_IMAGE" -ec '
+            quartus_sh --version | tee pilot-reports/quartus-version.txt
+            grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+            bash tests/llapi/build-riders.sh'
+      - name: Verify generated menu and package three new games
+        run: |
+          set -euo pipefail
+          support=.github/riders-enhanced2
+          project=jtcores/cores/riders/mister
+          python3 "$support/verificar-autofire.py" "$project/cfgstr.hex" \
+            "$project/jtriders.qsf" jtcores/modules/jtframe/target/mister/hdl/jtframe_mister.sv --static-only
+          python3 "$support/check.py" menu "$project/cfgstr.hex"
+          python3 "$support/check.py" package jtcores install
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: riders-Enhanced-2.1
+          path: install/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: riders-Enhanced-2.1-reports
+          path: jtcores/pilot-reports/
+          if-no-files-found: warn
