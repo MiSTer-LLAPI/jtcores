@@ -1,4 +1,4 @@
-"""Validate the official CPS1 MRAs and package only the 30 new games."""
+"""Validate the official CPS1 MRAs and package the 30 new games and Final Fight."""
 from pathlib import Path
 import csv
 import hashlib
@@ -12,7 +12,7 @@ STEM = "jtcps1_llapi21"
 
 def profiles():
     rows = list(csv.DictReader((SUPPORT / "mra-profiles.csv").open()))
-    assert len(rows) == 30
+    assert len(rows) == 31
     result = {row["mra"]: row for row in rows}
     assert len(result) == len(rows)
     return result
@@ -50,7 +50,7 @@ def mras(dest=None):
             target.write_bytes(raw.replace(b"<rbf>jtcps1</rbf>",
                                            f"<rbf>{STEM}</rbf>".encode()))
     assert seen == set(catalogue)
-    print("30 official CPS1 MRAs, actions, headers and hashes verified")
+    print("31 official CPS1 MRAs, actions, headers and hashes verified")
 
 
 def menu(path):
@@ -81,7 +81,7 @@ def package(source, dest):
     sums = "".join(hashlib.sha256(f.read_bytes()).hexdigest() + "  " +
                    f.relative_to(dest).as_posix() + "\n"
                    for f in sorted(dest.rglob("*")) if f.is_file())
-    assert len(sums.splitlines()) == 31
+    assert len(sums.splitlines()) == len(profiles()) + 1
     (dest / "SHA256SUMS").write_text(sums)
     print(sums)
 
