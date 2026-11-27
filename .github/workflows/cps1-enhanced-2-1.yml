@@ -57,6 +57,12 @@ jobs:
             -o /tmp/cps1-llapi "$support/cps1-llapi-six-buttons-tb.sv" \
             "$hdl/jtframe_llapi_arcade.sv"
           vvp -N /tmp/cps1-llapi
+          iverilog -g2012 -DJTFRAME_LLAPI_EXTRA_ACTIONS -DJTFRAME_ENHANCED_CONTROLS \
+            -DJTFRAME_LLAPI_HOLD_AUTOFIRE -DJTFRAME_SNAC_TURBO_MASK=63 \
+            -s jtframe_serial_arcade -o /tmp/cps1-serial-elab \
+            "$hdl/jtframe_serial_arcade.sv" "$hdl/jtframe_llapi_arcade.sv" \
+            "$hdl/jtframe_snac_turbo.sv" "$hdl/jtframe_llapi_protocol.sv" \
+            "$hdl/joydb15.v"
       - name: Compile CPS1 and accept positive timing margins only
         working-directory: jtcores
         run: |
