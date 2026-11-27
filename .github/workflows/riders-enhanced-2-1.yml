@@ -60,6 +60,9 @@ jobs:
               -s "$top" -o "/tmp/$profile" "$support/$profile-tb.sv" $sources
             vvp -N "/tmp/$profile"
           done
+          iverilog -g2012 -s riders_4p_tb -o /tmp/riders-4p \
+            "$support/riders-4p-tb.sv" jtcores/cores/riders/hdl/jtriders_cab.v
+          vvp -N /tmp/riders-4p
       - name: Compile Riders and accept positive timing margins only
         working-directory: jtcores
         run: |
