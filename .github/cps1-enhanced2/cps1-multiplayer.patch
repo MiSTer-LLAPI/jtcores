@@ -10,10 +10,14 @@
  JTFRAME_CREDITS=1
 --- a/modules/jtframe/target/mister/cfgstr
 +++ b/modules/jtframe/target/mister/cfgstr
-@@ -66,7 +66,15 @@
+@@ -64,9 +64,17 @@
+ P2,Autofire;
+ D7P2O8,P1 Autofire,Off,Hold;
  D8P2OPQ,P1 Speed,Normal,Slow,Fast;
- D7P2ON,P2 Autofire,Off,Hold;
- D9P2ORS,P2 Speed,Normal,Slow,Fast;
+-D7P2ON,P2 Autofire,Off,Hold;
+-D9P2ORS,P2 Speed,Normal,Slow,Fast;
++{{ if and .JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE (not .JTFRAME_CRT480I) }}HF{{ end }}D7P2ON,P2 Autofire,Off,Hold;
++{{ if and .JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE (not .JTFRAME_CRT480I) }}HF{{ end }}D9P2ORS,P2 Speed,Normal,Slow,Fast;
 +{{ if .JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE }}
 +HDP2O[80],P3 Autofire,Off,Hold;
 +HDP2O[82:81],P3 Speed,Normal,Slow,Fast;
@@ -37,15 +41,19 @@
  HCP3-,LLAPI Driver: 1.2;
 --- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
 +++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
-@@ -480,12 +480,30 @@
+@@ -480,22 +480,52 @@
  `else
  wire six_button_cab = 0, six_button_sys = 0;
  `endif
 +`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++wire single_player_rom;
++reg single_player_meta = 0, single_player_sys = 0;
 +wire [2:0] cps1_profile_rom;
 +reg [2:0] cps1_profile_meta = 0, cps1_profile_sys = 0;
-+cps1_autofire_header u_cps1_header(clk_rom, ioctl_rom, ioctl_wr, ioctl_addr, ioctl_dout, cps1_profile_rom);
++cps1_autofire_header u_cps1_header(clk_rom, ioctl_rom, ioctl_wr, ioctl_addr, ioctl_dout, cps1_profile_rom, single_player_rom);
 +always @(posedge clk_sys) begin
++    single_player_meta <= single_player_rom;
++    single_player_sys <= single_player_meta;
 +    cps1_profile_meta <= cps1_profile_rom;
 +    cps1_profile_sys <= cps1_profile_meta;
 +end
@@ -68,7 +76,13 @@
  `ifdef JTFRAME_CRT480I
         status_menumask[15] = ~crt_on,
  `else
-@@ -495,7 +513,11 @@
++       `ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++       status_menumask[15] = single_player_rom,
++`else
+        status_menumask[15] = 0,
+ `endif
++`endif
+ `else
  assign status_menumask[15:14] = 0,
  `endif
  `ifdef JTFRAME_ENHANCED_CONTROLS
@@ -80,7 +94,7 @@
  `else
         status_menumask[13] = 0,
  `endif
-@@ -601,6 +623,9 @@
+@@ -601,12 +631,19 @@
  
  assign show_osd=0;
  jtframe_serial_arcade #(.BUTTONS(BUTTONS)) u_serial(
@@ -90,7 +104,18 @@
      .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
      .repoll_off(status[24]),.mode(status[63:61]),.db15_drive(db15_en),
      .autofire_enable(status[8] && !six_button_sys),.autofire_toggle(1'b0),
-@@ -1157,8 +1182,13 @@
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     .loss_resume(status[30]),.loss_paused(enhanced_loss_paused),.loss_countdown(enhanced_loss_countdown),.loss_players(enhanced_loss_players),
+-    .autofire_enable2(status[23] && !six_button_sys),.autofire_toggle2(1'b0),
++    .autofire_enable2(status[23] && !six_button_sys
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++        && !single_player_sys
++`endif
++    ),.autofire_toggle2(1'b0),
+     .autofire_rate1(status[26:25]),.autofire_rate2(status[28:27]),
+     .info_clk(clk_rom),.controller_info(enhanced_controller_info),.link_diagnostics(enhanced_link_diagnostics),
+     .last_fault_reason(enhanced_last_fault),
+@@ -1157,8 +1194,13 @@
      .ps2_kbd_data   ( ps2_kbd_data    ),
      .board_joystick1( joystick1       ),
      .board_joystick2( joystick2       ),
@@ -149,7 +174,7 @@
  `else
      assign joy1=raw_joy1;assign joy2=raw_joy2;
  `endif
-@@ -444,3 +454,64 @@
+@@ -444,3 +454,74 @@
  assign fire=!rst && !inhibit && (manual_fire || (active && phase));
  endmodule
  `endif
@@ -181,21 +206,31 @@
 +    input wire clk_rom, ioctl_rom, ioctl_wr,
 +    input wire [26:0] ioctl_addr,
 +    input wire [7:0] ioctl_dout,
-+    output reg [2:0] profile = 3'b000
++    output reg [2:0] profile = 3'b000,
++    output reg single_player = 0
 +);
 +    reg [7:0] header16, header34;
 +    reg [1:0] received = 2'b00;
++    reg pumpkin_header = 0;
 +    wire [2:0] decoded;
 +    cps1_autofire_profile decode(header16, header34, ioctl_dout,
 +        decoded[2], decoded[1], decoded[0]);
 +    always @(posedge clk_rom) begin
-+        if (!ioctl_rom) received <= 0;
++        if (!ioctl_rom) begin received <= 0; pumpkin_header <= 0; end
 +        else if (ioctl_wr) begin
 +            case (ioctl_addr)
-+                0: begin received <= 0; profile <= 0; end
++                0: begin received <= 0; profile <= 0; single_player <= 0; pumpkin_header <= 0; end
 +                16: begin header16 <= ioctl_dout; received[0] <= 1; end
 +                34: begin header34 <= ioctl_dout; received[1] <= 1; end
-+                39: begin profile <= (&received) ? decoded : 3'b000; received <= 0; end
++                39: begin
++                    profile <= (&received) ? decoded : 3'b000;
++                    pumpkin_header <= (&received) && {header16,header34,ioctl_dout} == 24'h322000;
++                    received <= 0;
++                end
++                40: begin
++                    single_player <= pumpkin_header && ioctl_dout == 8'hfe;
++                    pumpkin_header <= 0;
++                end
 +            endcase
 +        end
 +    end

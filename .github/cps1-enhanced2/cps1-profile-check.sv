@@ -1,5 +1,5 @@
-module check_profiles; reg clk=0,rom=1,wr=1; reg [26:0] addr; reg [7:0] data; wire [2:0] profile;
-cps1_autofire_header dut(clk,rom,wr,addr,data,profile);
+module check_profiles; reg clk=0,rom=1,wr=1; reg [26:0] addr; reg [7:0] data; wire [2:0] profile; wire single_player;
+cps1_autofire_header dut(clk,rom,wr,addr,data,profile,single_player);
 task put(input integer a,input integer d); begin addr=a;data=d;#1;clk=1;#1;clk=0;end endtask
 initial begin
 put(0,0); if(profile!==0) $fatal; put(16,8'hff);put(34,8'h18);put(39,8'h01);if(profile!==3'd0) $fatal(1,"cworld2j");
@@ -32,4 +32,8 @@ put(0,0); if(profile!==0) $fatal; put(16,8'h32);put(34,8'h1d);put(39,8'h00);if(p
 put(0,0); if(profile!==0) $fatal; put(16,8'h32);put(34,8'h01);put(39,8'h00);if(profile!==3'd0) $fatal(1,"unsquad");
 put(0,0); if(profile!==0) $fatal; put(16,8'h20);put(34,8'h28);put(39,8'h01);if(profile!==3'd0) $fatal(1,"varth");
 put(0,0); if(profile!==0) $fatal; put(16,8'hff);put(34,8'h29);put(39,8'h00);if(profile!==3'd0) $fatal(1,"willow");
+put(0,0);put(16,50);put(34,32);put(39,0);put(40,254);
+if(single_player!==1) $fatal(1,"Magical Pumpkin needs P1 only");
+put(0,0);if(single_player!==0)$fatal(1,"stale player count");
+put(40,254);if(single_player!==0)$fatal(1,"partial header");
 put(0,0);put(39,32);if(profile!==0)$fatal; $display("PASS: 30 MRA headers, game change and incomplete header");$finish;end endmodule

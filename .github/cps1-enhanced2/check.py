@@ -61,7 +61,7 @@ def menu(path):
         b"HDP2O[80],P3 Autofire,Off,Hold", b"HDP2O[82:81],P3 Speed,Normal,Slow,Fast",
         b"HEP2O[83],P4 Autofire,Off,Hold", b"HEP2O[85:84],P4 Speed,Normal,Slow,Fast",
         b"P2,Autofire", b"D7P2O8,P1 Autofire,Off,Hold",
-        b"D7P2ON,P2 Autofire,Off,Hold", b"P2-,Hold repeats the first action",
+        b"HFD7P2ON,P2 Autofire,Off,Hold", b"HFD9P2ORS,P2 Speed,Normal,Slow,Fast", b"P2-,Hold repeats the first action",
         b"P2-,SNAC: hold action + Start x3",
         b"OC,Show credits on pause,Off,On",
         b"HCP3-,Immediate Repoll: On", b"HCP3-,LLAPI Driver: 1.2",
