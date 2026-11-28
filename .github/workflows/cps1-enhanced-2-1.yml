@@ -67,7 +67,7 @@ jobs:
           vvp -N /tmp/cps1-llapi
           iverilog -g2012 -DJTFRAME_LLAPI_EXTRA_ACTIONS -DJTFRAME_ENHANCED_CONTROLS \
             -DJTFRAME_LLAPI_HOLD_AUTOFIRE -DJTFRAME_SNAC_TURBO_MASK=63 \
-            -s jtframe_serial_arcade -o /tmp/cps1-serial-elab \
+            -DJTFRAME_CPS1_MULTIPLAYER_AUTOFIRE -s jtframe_serial_arcade -o /tmp/cps1-serial-elab \
             "$hdl/jtframe_serial_arcade.sv" "$hdl/jtframe_llapi_arcade.sv" \
             "$hdl/jtframe_snac_turbo.sv" "$hdl/jtframe_llapi_protocol.sv" \
             "$hdl/joydb15.v"
