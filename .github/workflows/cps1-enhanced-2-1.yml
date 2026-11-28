@@ -1,5 +1,6 @@
 name: CPS1 Enhanced 2.1 LLAPI 1.2
 on:
+  workflow_dispatch:
   push:
     branches: [test-cps1-multiplayer-llapi12]
     paths:
