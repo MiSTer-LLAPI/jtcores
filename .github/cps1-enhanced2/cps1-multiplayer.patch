@@ -1,0 +1,216 @@
+--- a/cores/cps1/cfg/macros.def
++++ b/cores/cps1/cfg/macros.def
+@@ -12,6 +12,7 @@
+ JTFRAME_ENHANCED_CONTROLS
+ JTFRAME_UNIFIED_LLAPI
+ JTFRAME_ENHANCED_FIXED_OPTIONS
++JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
+ JTFRAME_LLAPI_HIDE_DIAGNOSTICS
+ JTFRAME_SNAC_PCE_NES
+ JTFRAME_CREDITS=1
+--- a/modules/jtframe/target/mister/cfgstr
++++ b/modules/jtframe/target/mister/cfgstr
+@@ -66,7 +66,15 @@
+ D8P2OPQ,P1 Speed,Normal,Slow,Fast;
+ D7P2ON,P2 Autofire,Off,Hold;
+ D9P2ORS,P2 Speed,Normal,Slow,Fast;
++{{ if .JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE }}
++HDP2O[80],P3 Autofire,Off,Hold;
++HDP2O[82:81],P3 Speed,Normal,Slow,Fast;
++HEP2O[83],P4 Autofire,Off,Hold;
++HEP2O[85:84],P4 Speed,Normal,Slow,Fast;
+ P2-,Hold repeats the first action;
++{{ else }}
++P2-,Hold repeats the first action;
++{{ end }}
+ P2-,SNAC: hold action + Start x3;
+ P2-,Repeat to turn turbo off;
+ {{ end }}
+@@ -77,7 +85,7 @@
+ hCP3-,CONNECTION: SNAC PROTOCOL;
+ hCP3-,{{printf "\u0080\u0081\u0082\u0083\u0084\u0085\u0086\u0087\u0088\u0089\u008a\u008b\u008c\u008d\u008e\u008f\u0090\u0091\u0092\u0093\u0094\u0095\u0096\u0097\u0098\u0099\u009a\u009b\u009c\u009d\u009e\u009f"}};
+ HCP3-,P1: {{printf "\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017"}};
+-HCDEP3-,P2: {{printf "\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037"}};
++HC{{ if not .JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE }}DE{{ end }}P3-,P2: {{printf "\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037"}};
+ HCP3-,(!) DISCONNECTED;
+ HCP3-,TYPE: AUTO CONTROLLER ID;
+ HCP3-,LLAPI Driver: 1.2;
+--- a/modules/jtframe/target/mister/hdl/jtframe_mister.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_mister.sv
+@@ -480,12 +480,30 @@
+ `else
+ wire six_button_cab = 0, six_button_sys = 0;
+ `endif
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++wire [2:0] cps1_profile_rom;
++reg [2:0] cps1_profile_meta = 0, cps1_profile_sys = 0;
++cps1_autofire_header u_cps1_header(clk_rom, ioctl_rom, ioctl_wr, ioctl_addr, ioctl_dout, cps1_profile_rom);
++always @(posedge clk_sys) begin
++    cps1_profile_meta <= cps1_profile_rom;
++    cps1_profile_sys <= cps1_profile_meta;
++end
++wire [15:0] cps1_pad3, cps1_pad4;
++cps1_usb_autofire repeat_p3(clk_sys,rst,~LVBL,OSD_STATUS,cps1_profile_sys[0],
++    cps1_profile_sys[2] && hps_status_full[80],hps_status_full[82:81],joystick3,cps1_pad3);
++cps1_usb_autofire repeat_p4(clk_sys,rst,~LVBL,OSD_STATUS,cps1_profile_sys[0],
++    cps1_profile_sys[1] && hps_status_full[83],hps_status_full[85:84],joystick4,cps1_pad4);
++`endif
+ wire [15:0] status_menumask; // a high value hides the menu item
+ wire        vertical, db15_osd_combo_en;
+ 
+ assign db15_osd_combo_en = ~status[61];
+ `ifdef JTFRAME_ENHANCED_CONTROLS
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++assign status_menumask[14] = !cps1_profile_rom[1],
++`else
+ assign status_menumask[14] = 0,
++`endif
+ `ifdef JTFRAME_CRT480I
+        status_menumask[15] = ~crt_on,
+ `else
+@@ -495,7 +513,11 @@
+ assign status_menumask[15:14] = 0,
+ `endif
+ `ifdef JTFRAME_ENHANCED_CONTROLS
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++       status_menumask[13] = !cps1_profile_rom[2],
++`else
+        status_menumask[13] = status_menumask[7] || !(status[8] || status[23]),
++`endif
+ `else
+        status_menumask[13] = 0,
+ `endif
+@@ -601,6 +623,9 @@
+ 
+ assign show_osd=0;
+ jtframe_serial_arcade #(.BUTTONS(BUTTONS)) u_serial(
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++    .second_action(cps1_profile_sys[0]),
++`endif
+     .clk_50(clk_llapi),.clk_sys(clk_sys),.rst(rst),.vblank(~LVBL),
+     .repoll_off(status[24]),.mode(status[63:61]),.db15_drive(db15_en),
+     .autofire_enable(status[8] && !six_button_sys),.autofire_toggle(1'b0),
+@@ -1157,8 +1182,13 @@
+     .ps2_kbd_data   ( ps2_kbd_data    ),
+     .board_joystick1( joystick1       ),
+     .board_joystick2( joystick2       ),
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++    .board_joystick3( cps1_pad3 ),
++    .board_joystick4( cps1_pad4 ),
++`else
+     .board_joystick3( joystick3       ),
+     .board_joystick4( joystick4       ),
++`endif
+     .joy_aux_en     ( 1'b1            ),
+     .joyana_l1      ( joyana_l1       ),
+     .joyana_r1      ( joyana_r1       ),
+--- a/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
++++ b/modules/jtframe/target/mister/hdl/jtframe_serial_arcade.sv
+@@ -5,6 +5,9 @@
+ // reader in MiSTer-DB9/jtcores; this is a single-port SNAC implementation.
+ module jtframe_serial_arcade #(parameter BUTTONS=3)(
+     input clk_50,clk_sys,rst,vblank,osd_active,repoll_off,
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++    input second_action,
++`endif
+     input autofire_enable,autofire_toggle,
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     input autofire_enable2,autofire_toggle2,
+@@ -175,18 +178,25 @@
+     wire [1:0] held=stable && !inhibit ?
+         (active_sys==0 ? llapi_af : (active_sys==4 || active_sys==2 || (active_sys==1 && !AF_TWO_BUTTONS)) ? snac_af_sys : active_sys==1 && AF_TWO_BUTTONS ? {1'b0,pad_sys[6]} : active_sys==3 ? db_af_sys : 2'b0) : 2'b0;
+     wire fire1,fire2;
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++    wire use_b2 = second_action;
++`else
++    wire use_b2 = 1'b0;
++`endif
++    wire manual1 = use_b2 ? raw_joy1[5] : raw_joy1[4];
++    wire manual2 = use_b2 ? raw_joy2[5] : raw_joy2[4];
+ `ifdef JTFRAME_ENHANCED_CONTROLS
+     wire [1:0] clear_af={2{!stable}} | ({2{active_sys==0}} & (~llapi_connected | llapi_type_changed));
+-    enhanced_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,
++    enhanced_autofire af1(clk_sys,rst,vb_sync,held[0],manual1,inhibit,
+         effective_autofire,autofire_toggle,clear_af[0],autofire_rate1,fire1);
+-    enhanced_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,
++    enhanced_autofire af2(clk_sys,rst,vb_sync,held[1],manual2,inhibit,
+         autofire_enable2 && autofire_available,autofire_toggle2,clear_af[1],autofire_rate2,fire2);
+ `else
+-    selectable_autofire af1(clk_sys,rst,vb_sync,held[0],raw_joy1[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[0]),fire1);
+-    selectable_autofire af2(clk_sys,rst,vb_sync,held[1],raw_joy2[4],inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[1]),fire2);
+-`endif
+-    assign joy1={raw_joy1[15:5],fire1,raw_joy1[3:0]};
+-    assign joy2={raw_joy2[15:5],fire2,raw_joy2[3:0]};
++    selectable_autofire af1(clk_sys,rst,vb_sync,held[0],manual1,inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[0]),fire1);
++    selectable_autofire af2(clk_sys,rst,vb_sync,held[1],manual2,inhibit,effective_autofire,autofire_toggle,!stable || (active_sys==0 && !llapi_connected[1]),fire2);
++`endif
++    assign joy1=use_b2 ? {raw_joy1[15:6],fire1,raw_joy1[4:0]} : {raw_joy1[15:5],fire1,raw_joy1[3:0]};
++    assign joy2=use_b2 ? {raw_joy2[15:6],fire2,raw_joy2[4:0]} : {raw_joy2[15:5],fire2,raw_joy2[3:0]};
+ `else
+     assign joy1=raw_joy1;assign joy2=raw_joy2;
+ `endif
+@@ -444,3 +454,64 @@
+ assign fire=!rst && !inhibit && (manual_fire || (active && phase));
+ endmodule
+ `endif
++
++`ifdef JTFRAME_CPS1_MULTIPLAYER_AUTOFIRE
++// Select the control profile from the CPS1.5 ROM header.
++// Select the control profile from the CPS1 ROM header.
++module cps1_autofire_profile(
++    input wire [7:0] header16, header34, header39,
++    output reg player3, player4, attack_b2
++);
++    always @* begin
++        player3 = 0;
++        player4 = 0;
++        attack_b2 = 0;
++        case ({header16, header34, header39})
++            24'hff0404: begin player3 = 1; player4 = 1; end // captcomm
++            24'hff0d02: begin player3 = 1; player4 = 0; end // knights
++            24'h201302: begin player3 = 1; player4 = 0; end // mercs
++            24'hff0b03: begin player3 = 1; player4 = 0; end // kod
++            default: ;
++        endcase
++    end
++endmodule
++
++// ROM headers arrive in ascending address order in the download clock domain.
++// Clear the previous game's profile as soon as the next ROM starts.
++module cps1_autofire_header(
++    input wire clk_rom, ioctl_rom, ioctl_wr,
++    input wire [26:0] ioctl_addr,
++    input wire [7:0] ioctl_dout,
++    output reg [2:0] profile = 3'b000
++);
++    reg [7:0] header16, header34;
++    reg [1:0] received = 2'b00;
++    wire [2:0] decoded;
++    cps1_autofire_profile decode(header16, header34, ioctl_dout,
++        decoded[2], decoded[1], decoded[0]);
++    always @(posedge clk_rom) begin
++        if (!ioctl_rom) received <= 0;
++        else if (ioctl_wr) begin
++            case (ioctl_addr)
++                0: begin received <= 0; profile <= 0; end
++                16: begin header16 <= ioctl_dout; received[0] <= 1; end
++                34: begin header34 <= ioctl_dout; received[1] <= 1; end
++                39: begin profile <= (&received) ? decoded : 3'b000; received <= 0; end
++            endcase
++        end
++    end
++endmodule
++module cps1_usb_autofire(
++    input clk, rst, frame, osd, second_action, enable,
++    input [1:0] rate,
++    input [15:0] pad,
++    output [15:0] game_pad
++);
++    wire held = second_action ? pad[5] : pad[4];
++    wire pulse;
++    enhanced_autofire repeat_action(clk, rst, frame, held, 1'b0, osd,
++        enable, 1'b0, 1'b0, rate, pulse);
++    wire [15:0] action_mask = second_action ? 16'h0020 : 16'h0010;
++    assign game_pad = enable ? ((pad & ~action_mask) | (pulse ? action_mask : 16'd0)) : pad;
++endmodule
++`endif

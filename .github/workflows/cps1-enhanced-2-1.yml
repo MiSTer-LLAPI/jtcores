@@ -1,7 +1,7 @@
 name: CPS1 Enhanced 2.1 LLAPI 1.2
 on:
   push:
-    branches: [test-cps1-llapi12]
+    branches: [test-cps1-multiplayer-llapi12]
     paths:
       - '.github/workflows/cps1-enhanced-2-1.yml'
       - '.github/cps1-enhanced2/**'
@@ -37,6 +37,7 @@ jobs:
           support="$GITHUB_WORKSPACE/.github/cps1-enhanced2"
           git apply --check "$support/enhanced.patch"
           git apply --whitespace=nowarn "$support/enhanced.patch"
+          git apply "$support/cps1-multiplayer.patch"
           mkdir -p tests/llapi pilot-reports
           cp "$support/build-cps1.sh" "$support/check-cps1-timing.py" tests/llapi/
       - name: Validate official MRAs and simulate six buttons
@@ -49,6 +50,13 @@ jobs:
           support=.github/cps1-enhanced2
           hdl=jtcores/modules/jtframe/target/mister/hdl
           python3 "$support/check.py" mras
+          for bench in "check_profiles cps1-profile-check" "tmnt_extra_players_tb cps1-extra-players-tb"; do
+            read -r top file <<< "$bench"
+            iverilog -g2012 -DJTFRAME_ENHANCED_CONTROLS -DJTFRAME_CPS1_MULTIPLAYER_AUTOFIRE -s "$top" -o /tmp/mp-test "$support/$file.sv" "$hdl/jtframe_serial_arcade.sv"
+            vvp -N /tmp/mp-test
+          done
+          iverilog -g2012 -DCPS1 -s cps1_game_ports_tb -o /tmp/mp-ports "$support/cps1-game-ports-tb.sv" jtcores/cores/cps1/hdl/jtcps1_mmr.v
+          vvp -N /tmp/mp-ports
           iverilog -g2012 -DJTFRAME_SNAC_TURBO_MASK=63 -s cps1_six_buttons_tb \
             -o /tmp/cps1-snac "$support/cps1-six-buttons-tb.sv" \
             "$hdl/jtframe_snac_turbo.sv"

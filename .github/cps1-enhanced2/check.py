@@ -58,6 +58,8 @@ def menu(path):
     assert len(data) < 2048
     entries = data.split(b";")
     for required in (
+        b"HDP2O[80],P3 Autofire,Off,Hold", b"HDP2O[82:81],P3 Speed,Normal,Slow,Fast",
+        b"HEP2O[83],P4 Autofire,Off,Hold", b"HEP2O[85:84],P4 Speed,Normal,Slow,Fast",
         b"P2,Autofire", b"D7P2O8,P1 Autofire,Off,Hold",
         b"D7P2ON,P2 Autofire,Off,Hold", b"P2-,Hold repeats the first action",
         b"P2-,SNAC: hold action + Start x3",
