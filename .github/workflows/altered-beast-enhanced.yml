@@ -1,0 +1,82 @@
+name: Altered Beast Enhanced 2.1 LLAPI 1.2
+on:
+  workflow_dispatch:
+  push:
+    branches: [test-altbeast-llapi12]
+permissions:
+  contents: read
+concurrency:
+  group: altbeast-enhanced-2-1-llapi12
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BUILD_IMAGE: jotego/jtcore20@sha256:a0397645aeac483f90718c89e5fd491c4889db6e4202bcba7f7f7770e14beb6b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/s16b-enhanced2
+      - name: Check out official Sega System 16B release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: jotego/jtcores
+          ref: 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          path: jtcores
+          persist-credentials: false
+      - name: Verify official base and apply Sega System 16B integration
+        working-directory: jtcores
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8bc8172993b9b9488cb45ee8a913090fc4d9b143
+          git submodule update --init --recursive --depth 1 modules/fx68k modules/jt51 modules/jt8255 modules/jt7759
+          support="$GITHUB_WORKSPACE/.github/s16b-enhanced2"
+          git apply --check "$support/enhanced.patch"
+          git apply --whitespace=nowarn "$support/enhanced.patch"
+          python3 "$support/apply-llapi12.py"
+          git apply "$support/altered-beast-autofire.patch"
+          grep -q 'LLAPI Driver: 1.2' modules/jtframe/target/mister/cfgstr
+          mkdir -p tests/llapi pilot-reports
+          cp "$support/build-s16b.sh" "$support/check-s16b-timing.py" tests/llapi/
+      - name: Simulate SNAC autofire and controller routing
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y iverilog
+          hdl=jtcores/modules/jtframe/target/mister/hdl
+          iverilog -g2012 -DJTFRAME_LLAPI_HOLD_AUTOFIRE -DJTFRAME_LLAPI_EXTRA_ACTIONS -DJTFRAME_ENHANCED_CONTROLS -DJTFRAME_ENHANCED_FIXED_OPTIONS -s six_turbo_tb -o /tmp/golden-axe-turbo \
+            .github/s16b-enhanced2/action_turbo_tb.sv "$hdl/jtframe_serial_arcade.sv" "$hdl/jtframe_llapi_arcade.sv" "$hdl/jtframe_snac_turbo.sv" "$hdl/jtframe_llapi_protocol.sv" "$hdl/joydb15.v"
+          vvp -N /tmp/golden-axe-turbo
+      - name: Compile Sega System 16B and verify all timing categories
+        working-directory: jtcores
+        run: |
+          docker run --rm --network host --entrypoint /bin/bash -v "$PWD:/jtcores" -w /jtcores "$BUILD_IMAGE" -ec '
+            quartus_sh --version | tee pilot-reports/quartus-version.txt
+            grep -Eq "20\.1\.1.*Build 720.*Lite Edition" pilot-reports/quartus-version.txt
+            bash tests/llapi/build-s16b.sh'
+      - name: Verify generated menu and package the Altered Beast test core
+        run: |
+          project="jtcores/cores/s16b/mister"
+          python3 - "$project/cfgstr.hex" <<'PYMENU'
+          from pathlib import Path
+          import sys
+          menu = bytes.fromhex(Path(sys.argv[1]).read_text()).decode("latin1")
+          for field in ("D7P2O8,P1 Autofire,Off,Hold;", "D7P2ON,P2 Autofire,Off,Hold;", "P2-,Target: Punch (B1);", "LLAPI Driver: 1.2"):
+              assert field in menu, field
+          PYMENU
+          mkdir -p install
+          cp jtcores/release/mister/jts16b.rbf install/jtaltbeast_llapi21.rbf
+          cp ".github/s16b-enhanced2/Altered Beast (Enhanced 2.1 Test).mra" install/
+          (cd install && sha256sum jtaltbeast_llapi21.rbf > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Altered-Beast-Enhanced-2.1
+          path: install/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: Altered-Beast-Enhanced-2.1-reports
+          path: jtcores/pilot-reports/
+          if-no-files-found: warn

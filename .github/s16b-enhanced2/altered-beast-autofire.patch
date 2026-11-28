@@ -1,0 +1,30 @@
+diff --git a/cores/s16b/cfg/macros.def b/cores/s16b/cfg/macros.def
+index ca54c5c..7d34c6b 100644
+--- a/cores/s16b/cfg/macros.def
++++ b/cores/s16b/cfg/macros.def
+@@ -42,3 +42,6 @@ JTFRAME_SNAC_PCE_NES
+ JTFRAME_CREDITS=1
+ JTFRAME_CREDITS_DEFAULT_OFF
+ JTFRAME_LLAPI_EXTRA_ACTIONS
++
++JTFRAME_LLAPI_HOLD_AUTOFIRE
++JTFRAME_LLAPI_AUTOFIRE_OPTIONS
+diff --git a/modules/jtframe/target/mister/cfgstr b/modules/jtframe/target/mister/cfgstr
+index 157ec5f..1284a58 100644
+--- a/modules/jtframe/target/mister/cfgstr
++++ b/modules/jtframe/target/mister/cfgstr
+@@ -47,6 +47,14 @@ d5P1oAD,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;
+ {{ if .JTFRAME_LLAPI }} oTV,Serial port,LLAPI 2P,SATURN 1P,DB9 1P,DB15 2P,SNES 2P{{ if .JTFRAME_SNAC_PCE_NES }},PCE 1P,NES 2P{{ end }};
+ {{ if .JTFRAME_ENHANCED_CONTROLS }}
+ P1OT,Pause dim,Off,On;
++{{ if .JTFRAME_LLAPI_AUTOFIRE_OPTIONS }}
++P2,Autofire;
++D7P2O8,P1 Autofire,Off,Hold;
++D8P2OPQ,P1 Speed,Normal,Slow,Fast;
++D7P2ON,P2 Autofire,Off,Hold;
++D9P2ORS,P2 Speed,Normal,Slow,Fast;
++P2-,Target: Punch (B1);
++{{ end }}
+ P3,CONTROLLER GUIDE;
+ hCP3-,SNAC: Hold action + Start x3;
+ hCP3-,Repeat to turn turbo off;
